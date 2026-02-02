@@ -2,10 +2,10 @@ name = "xiaoxi-fund-web"
 pages_build_output_dir = "dist"
 compatibility_date = "2024-02-02"
 
-# Bind the KV Namespace
-[[kv_namespaces]]
-binding = "FUND_DATA"
-id = "YOUR_KV_NAMESPACE_ID" # Run 'npx wrangler kv:namespace create FUND_DATA' to get this ID
+# KV Binding is configured in Cloudflare Dashboard
+# [[kv_namespaces]]
+# binding = "FUND_DATA"
+# id = "YOUR_KV_NAMESPACE_ID"
 
 # Define environment variables (placeholders)
 # Set actual secrets via Dashboard > Settings > Environment variables
