@@ -288,9 +288,22 @@ const App: React.FC = () => {
         
         // No explicit race/timeout wrapper here, rely on individual service timeouts (8s)
         try {
+            // Log the start of sync to show activity in Admin Dashboard
+            if (activeCategory !== 'backend') { // Optional: Don't log if we are looking at the log itself? No, user wants to see it IN the log.
+                 // Reducing spam: only log if interval > 5s OR every nth time? 
+                 // User specifically asked for it, let's just log it.
+                 // Actually, "Syncing asset prices..." matches the user's reference image.
+            }
+            // addLog('info', 'Syncing asset prices...'); // Moving this inside setAssets or just here? 
+            // If we log here, it might trigger render before data? 
+            // Better to log "Scanning..." 
+            
             const freshAssets = await updateAssetsWithRealData(currentAssets, dataSource, shouldUpdateHistory);
             
             if (isMounted) {
+                // Log only if we got data (implicitly success if we are here)
+                addLog('info', `Syncing asset prices... (${freshAssets.length} assets)`);
+
                 setAssets(prevAssets => {
                     const updates = freshAssets.filter(f => prevAssets.some(p => p.id === f.id && p.currentValue !== f.currentValue));
                     if (updates.length > 0) {
