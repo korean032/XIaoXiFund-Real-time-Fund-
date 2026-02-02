@@ -1,5 +1,3 @@
-<div align="center">
-  <img width="100%" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" alt="XiaoXi Real-time Fund Banner" />
 
 # 📈 小熙实时基金 (XiaoXi Real-time Fund)
 
