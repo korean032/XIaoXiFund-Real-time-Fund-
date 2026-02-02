@@ -9,7 +9,7 @@ import { recognizePortfolioImage } from './services/imageRecognition';
 import { 
   LineChart, Plus, Search, RefreshCw, X, Loader2, ChevronLeft, ArrowUpRight, 
   TrendingUp, Activity, Globe, Coins, Layers, Clock, Moon, Sun, Settings, Check, 
-  Banknote, BarChart3, Zap, Menu, Filter, PieChart, ChevronRight, Server
+  Banknote, BarChart3, Zap, Menu, Filter, PieChart, ChevronRight, Server, Cloud, Download
 } from 'lucide-react';
 
 // --- Mock Data Generators ---
@@ -108,14 +108,28 @@ const App: React.FC = () => {
   const [searchResults, setSearchResults] = useState<FundSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [dataPersistenceMsg, setDataPersistenceMsg] = useState('');
   
   // Portfolio editing state
   const [isEditPortfolioOpen, setIsEditPortfolioOpen] = useState(false);
+  const [portfolioTab, setPortfolioTab] = useState<'modify' | 'add'>('add'); // 'modify' | 'add'
   const [portfolioInputMode, setPortfolioInputMode] = useState<'amount' | 'shares'>('amount'); // 默认金额模式
   const [editingShares, setEditingShares] = useState('');
   const [editingAmount, setEditingAmount] = useState(''); // 总投入金额
   const [editingCostPrice, setEditingCostPrice] = useState('');
-  const [editingFeeRate, setEditingFeeRate] = useState('0.15'); // 申购费率 (%)
+  const [editingFeeRate, setEditingFeeRate] = useState('0'); // 费率 %
+
+  // Global Logs
+  const [logs, setLogs] = useState<{time: string, type: 'info'|'warn'|'error', msg: string}[]>([]);
+
+  const addLog = (type: 'info'|'warn'|'error', msg: string) => {
+      setLogs(prev => [{
+          time: new Date().toLocaleTimeString(),
+          type,
+          msg
+      }, ...prev].slice(0, 100)); // Keep last 100 logs
+  };
   const [isRecognizing, setIsRecognizing] = useState(false); // AI识别中
   const [recognitionError, setRecognitionError] = useState('');
 
@@ -127,11 +141,28 @@ const App: React.FC = () => {
   useEffect(() => {
       localStorage.setItem('userAssets_v2', JSON.stringify(assets));
       // Debounce save to cloud
+      // Show saving state immediately if dirty?
+      if (assets !== INITIAL_ASSETS && assets.length > 0) {
+          setIsSaving(true);
+          setDataPersistenceMsg('Saving...');
+      }
+
       const timer = setTimeout(() => {
           if (assets.length > 0 && assets !== INITIAL_ASSETS) {
               saveRemoteAssets(assets).then(ok => {
-                  if (ok) console.log('Assets synced to cloud');
+                  if (ok) {
+                      console.log('Assets synced to cloud');
+                      setDataPersistenceMsg('已同步');
+                      addLog('info', 'Assets automatically synced to KV cloud storage');
+                      setTimeout(() => setDataPersistenceMsg(''), 2000);
+                  } else {
+                      setDataPersistenceMsg('同步失败');
+                      addLog('error', 'Failed to sync assets to cloud');
+                  }
+                  setIsSaving(false);
               });
+          } else {
+              setIsSaving(false);
           }
       }, 2000);
       return () => clearTimeout(timer);
@@ -256,28 +287,41 @@ const App: React.FC = () => {
         const currentAssets = assetsRef.current;
         
         // No explicit race/timeout wrapper here, rely on individual service timeouts (8s)
-        const freshAssets = await updateAssetsWithRealData(currentAssets, dataSource, shouldUpdateHistory);
-        
-        if (isMounted) {
-            setAssets(prevAssets => {
-                return prevAssets.map(prevAsset => {
-                    const freshAsset = freshAssets.find(f => f.id === prevAsset.id);
-                    if (!freshAsset) return prevAsset;
-                    return {
-                        ...prevAsset,
-                        ...freshAsset, // Spread all new properties
-                        // Keep sparkline if not updated
-                        sparkline: freshAsset.sparkline || prevAsset.sparkline,
-                        monthChangePercent: freshAsset.monthChangePercent ?? prevAsset.monthChangePercent,
-                    };
-                });
-            });
+        try {
+            const freshAssets = await updateAssetsWithRealData(currentAssets, dataSource, shouldUpdateHistory);
             
-            setIsRefreshing(false); // Visual indicator end
+            if (isMounted) {
+                setAssets(prevAssets => {
+                    const updates = freshAssets.filter(f => prevAssets.some(p => p.id === f.id && p.currentValue !== f.currentValue));
+                    if (updates.length > 0) {
+                        addLog('info', `Updated real-time data for ${updates.length} assets`);
+                    }
+                    return prevAssets.map(prevAsset => {
+                        const freshAsset = freshAssets.find(f => f.id === prevAsset.id);
+                        if (!freshAsset) return prevAsset;
+                        return {
+                            ...prevAsset,
+                            ...freshAsset, // Spread all new properties
+                            // Keep sparkline if not updated
+                            sparkline: freshAsset.sparkline || prevAsset.sparkline,
+                            monthChangePercent: freshAsset.monthChangePercent ?? prevAsset.monthChangePercent,
+                            // Update lastHistoryDate if we updated history (meaning it's intraday)
+                            lastHistoryDate: shouldUpdateHistory ? new Date().toISOString().split('T')[0] : (freshAsset.lastHistoryDate || prevAsset.lastHistoryDate)
+                        };
+                    });
+                });
+                
+                setIsRefreshing(false); // Visual indicator end
 
-            if (refreshInterval > 0) {
-                timerId = window.setTimeout(loop, refreshInterval);
+                if (refreshInterval > 0) {
+                    timerId = window.setTimeout(loop, refreshInterval);
+                }
             }
+        } catch (err: any) {
+            console.error(err);
+            addLog('error', `Update error: ${err.message}`);
+        } finally {
+            setIsRefreshing(false);
         }
     };
 
@@ -387,44 +431,109 @@ const App: React.FC = () => {
   const openEditPortfolio = () => {
       if (selectedAsset?.shares && selectedAsset?.costPrice) {
           // 有现有数据，显示份额模式
+          setPortfolioTab('modify');
           setPortfolioInputMode('shares');
           setEditingShares(selectedAsset.shares.toString());
           setEditingCostPrice(selectedAsset.costPrice.toString());
           setEditingAmount((selectedAsset.shares * selectedAsset.costPrice).toFixed(2));
       } else {
-          // 新添加，默认金额模式
+          // 新添加，默认加仓模式
+          setPortfolioTab('add');
           setPortfolioInputMode('amount');
           setEditingShares('');
-          setEditingCostPrice('');
+          setEditingCostPrice(selectedAsset?.currentValue.toString() || '');
           setEditingAmount('');
       }
       setIsEditPortfolioOpen(true);
   };
 
   const savePortfolio = () => {
-      let shares: number;
-      const costPrice = parseFloat(editingCostPrice);
-      
-      if (portfolioInputMode === 'amount') {
-          // 金额模式：份额 = 总金额 / 成本价
-          const amount = parseFloat(editingAmount);
-          if (!amount || !costPrice) return;
-          shares = amount / costPrice;
-      } else {
-          // 份额模式
-          shares = parseFloat(editingShares);
-          if (!shares || !costPrice) return;
-      }
-      
-      if (selectedAsset) {
+      if (!selectedAsset) return;
+
+      if (portfolioTab === 'modify') {
+          // Direct Modification (Override)
+          let shares: number;
+          const costPrice = parseFloat(editingCostPrice);
+          
+          if (portfolioInputMode === 'amount') {
+              // 金额模式：份额 = 总金额 / 成本价
+              const amount = parseFloat(editingAmount);
+              if (!amount || !costPrice) return;
+              shares = amount / costPrice;
+          } else {
+              // 份额模式
+              shares = parseFloat(editingShares);
+              if (!shares || !costPrice) return;
+          }
+          
           setAssets(prev => prev.map(a => 
               a.id === selectedAsset.id 
                   ? { ...a, shares: shares || undefined, costPrice: costPrice || undefined }
                   : a
           ));
+      } else {
+          // Add Position Mode (Weighted Average)
+          const buyAmount = parseFloat(editingAmount);
+          const buyPrice = parseFloat(editingCostPrice);
+          const feeRate = parseFloat(editingFeeRate) / 100;
+
+          if (!buyAmount || !buyPrice) return;
+
+          const currentShares = selectedAsset.shares || 0;
+          const currentCost = selectedAsset.costPrice || 0;
+          const currentTotalCost = currentShares * currentCost; // Previous total cost
+
+          // Add Position Logic
+          const netBuyAmount = buyAmount * (1 - feeRate); // Money that actually goes into shares? 
+          // Actually, standard formula for cost basis:
+          // Total Cost Basis = Old Cost Basis + New Buy Amount (GROSS)
+          // New Shares = Buy Amount * (1 - Fee) / Unit Price
+          
+          const newShares = (buyAmount * (1 - feeRate)) / buyPrice;
+          const finalTotalShares = currentShares + newShares;
+          const finalTotalCost = currentTotalCost + buyAmount; // You spent this much more
+
+          const finalAvgCost = finalTotalCost / finalTotalShares;
+
+          setAssets(prev => prev.map(a => 
+              a.id === selectedAsset.id 
+                  ? { ...a, shares: finalTotalShares, costPrice: finalAvgCost }
+                  : a
+          ));
+          
+          addLog('info', `Added position for ${selectedAsset.name}: +${netBuyAmount.toFixed(2)} CNY`);
       }
+
       setIsEditPortfolioOpen(false);
   };
+
+  // Stale Data Cleanup Effect
+  useEffect(() => {
+     // Check for stale intraday history on load
+     const today = new Date().toISOString().split('T')[0];
+     let hasChanges = false;
+     
+     const cleanAssets = assets.map(a => {
+         // If asset has history, and it's intraday-like (check dates or explicit flag?)
+         // We rely on lastHistoryDate. If missing, we assume it might be old if it's not today.
+         if (a.lastHistoryDate && a.lastHistoryDate !== today) {
+             console.log(`Cleaning stale history for ${a.name}`);
+             addLog('info', `Cleared stale intraday history for ${a.name}`);
+             hasChanges = true;
+             return { ...a, history: [], lastHistoryDate: today };
+         }
+         return a;
+     });
+
+     if (hasChanges) {
+         setAssets(cleanAssets);
+     }
+  }, [assets.length]); // Run once when assets loaded/changed length, or ideally just on mount/hydrate
+  // However, putting 'assets' in dependency might cause loop if we modify assets.
+  // Best to run this when assets are *first loaded* from storage.
+  // Implementation Note: logic placed in the initialization or simple effect with care.
+  // Let's rely on the fact that if we change it, it updates 'assets', loop triggers again, but condition fails.
+
 
   const resetAssets = () => {
       setAssets(INITIAL_ASSETS);
@@ -488,7 +597,7 @@ const App: React.FC = () => {
   ];
 
   return (
-    <div className="relative min-h-screen font-sans overflow-hidden text-slate-800 dark:text-slate-100 transition-colors duration-500">
+    <div className="relative h-screen flex flex-col font-sans overflow-hidden text-slate-800 dark:text-slate-100 transition-colors duration-500">
       
       {/* Liquid Background */}
       <div className="liquid-bg">
@@ -538,6 +647,13 @@ const App: React.FC = () => {
             </div>
             
             {/* Manual Refresh Button */}
+            {dataPersistenceMsg && (
+                 <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-white/10 rounded-full text-[10px] text-slate-500 font-medium animate-fade-in">
+                    {isSaving ? <Loader2 size={10} className="animate-spin" /> : <Cloud size={10} />}
+                    {dataPersistenceMsg}
+                 </div>
+            )}
+
             <button 
                 onClick={handleManualRefresh}
                 disabled={isRefreshing}
@@ -588,7 +704,7 @@ const App: React.FC = () => {
             </div>
         )}
 
-        <section className={`flex-1 flex flex-col h-full overflow-y-auto relative z-10 transition-opacity duration-300 p-4 sm:p-6 lg:p-10 ${showMobileDetail || assets.length === 0 || activeCategory === 'backend' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none sm:opacity-100 sm:pointer-events-auto'}`}>
+        <section className={`flex-1 flex flex-col h-full overflow-y-auto scrollbar-thin relative z-10 transition-opacity duration-300 p-4 sm:p-6 lg:p-10 ${showMobileDetail || assets.length === 0 || activeCategory === 'backend' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none sm:opacity-100 sm:pointer-events-auto'}`}>
             {activeCategory === 'backend' ? (
                  <AdminDashboard 
                     assets={assets} 
@@ -602,6 +718,8 @@ const App: React.FC = () => {
                     isDarkMode={isDarkMode}
                     setIsDarkMode={setIsDarkMode}
                     onResetAssets={resetAssets}
+                    logs={logs}
+                    onAddLog={addLog}
                  />
             ) : assets.length === 0 ? (
                 // --- Welcome / Empty State ---
@@ -666,6 +784,8 @@ const App: React.FC = () => {
                     isDarkMode={isDarkMode}
                     setIsDarkMode={setIsDarkMode}
                     onResetAssets={resetAssets}
+                    logs={logs}
+                    onAddLog={addLog}
                  />
             ) : selectedAsset ? (
                 <div className="max-w-6xl mx-auto w-full space-y-8 animate-fade-in">
@@ -859,7 +979,7 @@ const App: React.FC = () => {
                         </div>
                     )}
 
-                    <div className="flex justify-end pt-4 pb-12">
+                    <div className="flex justify-end pt-4 pb-40">
                          <button onClick={() => removeAsset(selectedAsset.id)} className="glass-button text-rose-500 hover:bg-rose-50/50 dark:hover:bg-rose-900/20 px-6 py-3 rounded-2xl transition-all font-bold flex items-center gap-2 group border-rose-200/50 dark:border-rose-800/20">
                              <X size={18} className="group-hover:rotate-90 transition-transform" /> 删除此资产
                          </button>
@@ -961,6 +1081,23 @@ const App: React.FC = () => {
                             )}
                         </div>
 
+                        {/* Tab Switcher */}
+                        <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-2">
+                             <button onClick={() => setPortfolioTab('add')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${portfolioTab === 'add' ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-blue-400' : 'text-slate-500'}`}>
+                                 加仓 / 买入
+                             </button>
+                             <button onClick={() => setPortfolioTab('modify')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${portfolioTab === 'modify' ? 'bg-white dark:bg-slate-700 shadow text-blue-600 dark:text-blue-400' : 'text-slate-500'}`}>
+                                 修改 / 重置
+                             </button>
+                        </div>
+                        
+                        {portfolioTab === 'modify' && (
+                            /* Modify Mode - Only show Image Upload here or both? Let's hide it for now to save space */
+                            <div className="glass-card p-3 mb-2 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
+                                 <div className="text-xs text-center text-slate-400">修改持仓数据将覆盖当前成本和份额</div>
+                            </div>
+                        )}
+
                         {/* Input Mode Toggle */}
                         <div className="flex gap-2 p-1 bg-slate-200/50 dark:bg-slate-700/50 rounded-xl">
                             <button
@@ -980,7 +1117,9 @@ const App: React.FC = () => {
                         {portfolioInputMode === 'amount' ? (
                             <>
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">总投入金额（元）</label>
+                                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">
+                                        {portfolioTab === 'add' ? '买入金额（元）' : '总投入金额（元）'}
+                                    </label>
                                     <div className="relative">
                                         <span className="absolute left-4 top-3.5 text-slate-400">¥</span>
                                         <input
@@ -998,7 +1137,9 @@ const App: React.FC = () => {
 
                                 <div className="flex gap-4">
                                     <div className="flex-1">
-                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">持仓成本价</label>
+                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">
+                                            {portfolioTab === 'add' ? '买入净值' : '持仓成本价'}
+                                        </label>
                                         <input
                                             type="number"
                                             step="0.0001"
@@ -1038,7 +1179,9 @@ const App: React.FC = () => {
                                             <span className="font-mono">¥{(parseFloat(editingAmount) * (1 - parseFloat(editingFeeRate || '0') / 100)).toFixed(2)}</span>
                                         </div>
                                         <div className="flex justify-between items-end pt-1">
-                                            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">最终持有份额:</span>
+                                            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                                                {portfolioTab === 'add' ? '预估增加份额:' : '最终持有份额:'}
+                                            </span>
                                             <div className="text-2xl font-bold text-slate-800 dark:text-white font-mono tracking-tight leading-none">
                                                 {((parseFloat(editingAmount) * (1 - parseFloat(editingFeeRate || '0') / 100)) / parseFloat(editingCostPrice)).toFixed(2)} 
                                                 <span className="text-sm text-slate-400 ml-1 font-normal">份</span>
@@ -1144,6 +1287,36 @@ const App: React.FC = () => {
                       isDarkMode={isDarkMode}
                       setIsDarkMode={setIsDarkMode}
                       onResetAssets={resetAssets}
+                      logs={logs}
+                      onAddLog={addLog}
+                      onEditAsset={(asset) => { 
+                          setSelectedAssetId(asset.id); // Also select it in the main view
+                          setShowAdmin(false); 
+                          openEditPortfolio(); // Try to use the existing helper, but need to ensure it uses the *passed* asset or updates selectedAsset first?
+                          // Actually openEditPortfolio uses 'selectedAsset' state.
+                          // So we simply set selectedAssetId, wait for effect? No, effects might be async/slow.
+                          // Better: Just set the state and open.
+                          // But we need to make sure 'selectedAsset' derived from 'selectedAssetId' is ready if we rely on it.
+                          // However, 'selectedAsset' is `assets.find(a => a.id === selectedAssetId)`.
+                          // So setting ID is enough for the next render.
+                          // BUT openEditPortfolio reads selectedAsset immediately? 
+                          // Let's modify openEditPortfolio to accept an asset optionally? 
+                          // Or just manually do what openEditPortfolio does here inline.
+                          
+                          // Inline logic:
+                          if (asset.shares && asset.costPrice) {
+                              setPortfolioInputMode('shares');
+                              setEditingShares(asset.shares.toString());
+                              setEditingCostPrice(asset.costPrice.toString());
+                              setEditingAmount((asset.shares * asset.costPrice).toFixed(2));
+                          } else {
+                              setPortfolioInputMode('amount');
+                              setEditingShares('');
+                              setEditingCostPrice('');
+                              setEditingAmount('');
+                          }
+                          setIsEditPortfolioOpen(true);
+                      }}
                   />
               </div>
           </div>

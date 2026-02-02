@@ -4,7 +4,7 @@ import {
     LayoutDashboard, Database, Settings, Server, Activity, 
     Trash2, Search, Plus, AlertCircle, CheckCircle2, Clock, ScrollText,
     BarChart3, HardDrive, RefreshCw, X, ChevronRight, Zap, Target,
-    PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight, MoreHorizontal
+    PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight, MoreHorizontal, Edit2
 } from 'lucide-react';
 import { 
     PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend 
@@ -21,6 +21,9 @@ interface AdminDashboardProps {
     isDarkMode: boolean;
     setIsDarkMode: (dark: boolean) => void;
     onResetAssets: () => void;
+    logs: {time: string, type: 'info'|'warn'|'error', msg: string}[];
+    onAddLog: (type: 'info'|'warn'|'error', msg: string) => void;
+    onEditAsset: (asset: Asset) => void;
 }
 
 // --- Sub-Components ---
@@ -72,13 +75,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setRefreshInterval,
     isDarkMode,
     setIsDarkMode,
-    onResetAssets
+    onResetAssets,
+    logs,
+    onAddLog,
+    onEditAsset
 }) => {
     const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'service' | 'settings'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
     const [serviceLatency, setServiceLatency] = useState<number | null>(null);
-    const [logs, setLogs] = useState<{time: string, type: 'info'|'warn'|'error', msg: string}[]>([]);
 
     // Analytics Data
     const categoryData = useMemo(() => {
@@ -113,17 +118,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         if (confirm(`确定要删除选中的 ${selectedAssets.size} 个资产吗？`)) {
             selectedAssets.forEach(id => onDeleteAsset(id));
             setSelectedAssets(new Set());
-            addLog('warn', `Batch deleted ${selectedAssets.size} assets`);
+            onAddLog?.('warn', `Batch deleted ${selectedAssets.size} assets`);
         }
-    };
-
-    // Logging & Health
-    const addLog = (type: 'info'|'warn'|'error', msg: string) => {
-        setLogs(prev => [{
-            time: new Date().toLocaleTimeString(),
-            type,
-            msg
-        }, ...prev].slice(0, 100));
     };
 
     useEffect(() => {
@@ -134,10 +130,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 await new Promise(r => setTimeout(r, Math.random() * 50 + 20)); 
                 const latency = Math.floor(performance.now() - start);
                 setServiceLatency(latency);
-                if (Math.random() > 0.95) addLog('info', `Health check passed: ${latency}ms`);
+                // Reduce log noise, only log health check rarely or on slow
+                if (Math.random() > 0.98) onAddLog?.('info', `Health check passed: ${latency}ms`);
             } catch (e) {
                 setServiceLatency(-1);
-                addLog('error', 'Health check failed');
+                onAddLog?.('error', 'Health check failed');
             }
         };
         const timer = setInterval(checkHealth, 5000);
@@ -435,7 +432,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
                                                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <IconButton icon={MoreHorizontal} />
+                                                            <IconButton icon={Edit2} onClick={() => onEditAsset(asset)} className="text-blue-400 hover:text-blue-500 hover:bg-blue-500/10" />
                                                             <IconButton icon={Trash2} danger onClick={() => onDeleteAsset(asset.id)} />
                                                         </div>
                                                     </td>
@@ -452,6 +449,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </div>
                             )}
                         </div>
+                    </div>
+                )}
+
+                {/* SERVICE TAB */}
+                {activeTab === 'service' && (
+                    <div className="space-y-6 animate-fade-in-up h-full flex flex-col">
+                         {/* System Health Cards */}
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <StatCard 
+                                title="API Latency" 
+                                value={`${serviceLatency || '--'}ms`} 
+                                subtext="EastMoney API" 
+                                icon={Activity} 
+                                color={serviceLatency && serviceLatency > 200 ? "bg-amber-500" : "bg-emerald-500"} 
+                            />
+                            <StatCard 
+                                title="Memory Usage" 
+                                value="~14MB" 
+                                subtext="Estimated" 
+                                icon={HardDrive} 
+                                color="bg-blue-500" 
+                            />
+                            <StatCard 
+                                title="Uptime" 
+                                value="99.9%" 
+                                subtext="Since Last Deploy" 
+                                icon={Zap} 
+                                color="bg-purple-500" 
+                            />
+                         </div>
+
+                         {/* Full Log Stream */}
+                         <div className="flex-1 glass-card rounded-3xl border border-white/20 flex flex-col overflow-hidden min-h-[400px]">
+                            <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+                                <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                    <ScrollText size={20} className="text-slate-400"/>
+                                    System Event Log
+                                </h3>
+                                <div className="text-xs text-slate-500 font-mono">
+                                    Total: {logs.length} events
+                                </div>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-2 font-mono text-xs scrollbar-thin bg-black/5 dark:bg-black/20">
+                                {logs.length === 0 && (
+                                    <div className="text-center text-slate-400 py-10">No system logs recorded yet</div>
+                                )}
+                                {logs.map((log, i) => (
+                                    <div key={i} className="flex gap-4 p-2 hover:bg-white/5 rounded-lg border-b border-white/5 last:border-0 transition-colors">
+                                        <div className="text-slate-500 w-24 shrink-0">{log.time}</div>
+                                        <div className={`w-12 font-bold uppercase shrink-0 ${
+                                            log.type === 'error' ? 'text-red-500' : 
+                                            log.type === 'warn' ? 'text-amber-500' : 
+                                            'text-emerald-500'
+                                        }`}>
+                                            [{log.type}]
+                                        </div>
+                                        <div className="text-slate-700 dark:text-slate-300 break-all">{log.msg}</div>
+                                    </div>
+                                ))}
+                                <div className="h-4" /> {/* Spacer */}
+                            </div>
+                         </div>
                     </div>
                 )}
 

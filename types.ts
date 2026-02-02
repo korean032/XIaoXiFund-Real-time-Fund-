@@ -46,6 +46,7 @@ export interface Asset {
   // Portfolio Tracking
   shares?: number;        // 持有份额
   costPrice?: number;     // 成本价（买入均价）
+  lastHistoryDate?: string; // Date (YYYY-MM-DD) of the last intraday history update
 }
 
 export interface GeminiAnalysis {
