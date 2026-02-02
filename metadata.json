@@ -1,0 +1,5 @@
+{
+  "name": "小熙实时基金",
+  "description": "基于Gemini AI的智能基金实时估值与深度分析助手，提供模拟实时行情与AI投资建议。",
+  "requestFramePermissions": []
+}
