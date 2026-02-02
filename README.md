@@ -1,4 +1,3 @@
-
 # 📈 小熙实时基金 (XiaoXi Real-time Fund)
 
 **极简、优雅的个人基金实时监控看板**
@@ -117,6 +116,14 @@ npm run build
 npx wrangler pages deploy dist --project-name xiaoxi-fund-web
 ```
 
+> **重要提示 (Git 集成部署)**:
+> 如果您连接了 GitHub 仓库进行自动部署，请务必在 Cloudflare Pages 后台 **Settings -> Builds & deployments** 中设置：
+>
+> - **Build command**: `npm run build`
+> - **Build output directory**: `dist`
+>
+> `wrangler.toml` 虽然可以配置 KV，但目前的 Cloudflare Pages Git 集成可能不会从文件中读取构建命令。
+
 > **提示**: 部署完成后，请务必在 Cloudflare Pages 后台 -> Settings -> Functions -> KV Namespace Bindings 中，检查 `FUND_DATA` 是否已正确绑定到您创建的 KV 空间。
 
 ## 📝 免责声明
@@ -130,3 +137,4 @@ npx wrangler pages deploy dist --project-name xiaoxi-fund-web
 <div align="center">
   Created with ❤️ by Antigravity
 </div>
+```
