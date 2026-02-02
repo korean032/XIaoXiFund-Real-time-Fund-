@@ -27,37 +27,7 @@ const generateMockHistory = (baseValue: number): HistoryPoint[] => {
 };
 
 // --- Initial Data Sets ---
-const INITIAL_ASSETS: Asset[] = [
-  // Funds
-  {
-    id: 'f1', category: 'fund', code: '001618', apiCode: '001618', name: '天弘中证电子ETF联接C',
-    currentValue: 1.0, yesterdayValue: 1.0, history: generateMockHistory(1.0),
-    tags: ['科技', '半导体'], type: '指数型', sector: '电子信息', time: '--', unitNav: 1.0
-  },
-  // Indices
-  {
-    id: 'i1', category: 'index', code: '000001', apiCode: 'sh000001', name: '上证指数',
-    currentValue: 3000, yesterdayValue: 3000, history: generateMockHistory(3000),
-    tags: ['A股', '大盘'], type: '上交所', sector: '大盘指数', time: '--'
-  },
-  {
-    id: 'i3', category: 'index', code: 'IXIC', apiCode: 'us.IXIC', name: '纳斯达克',
-    currentValue: 16000, yesterdayValue: 16000, history: generateMockHistory(16000),
-    tags: ['美股', '科技'], type: 'NASDAQ', sector: '美股指数', time: '--'
-  },
-  // Gold
-  {
-    id: 'g1', category: 'gold', code: 'XAU', apiCode: '100.XAU', name: '黄金/美元',
-    currentValue: 2300.0, yesterdayValue: 2300.0, history: generateMockHistory(2300.0),
-    tags: ['贵金属', '现货'], type: '国际现货', sector: '国际黄金', time: '--'
-  },
-  // Stocks (Example)
-  {
-    id: 'st1', category: 'stock', code: '600519', apiCode: 'sh600519', name: '贵州茅台',
-    currentValue: 1700.0, yesterdayValue: 1700.0, history: generateMockHistory(1700.0),
-    tags: ['白酒', '龙头'], type: '沪A', sector: '白酒', time: '--'
-  }
-];
+const INITIAL_ASSETS: Asset[] = [];
 
 const DATA_SOURCES: { id: DataSource; label: string }[] = [
     { id: 'EastMoney', label: '东方财富' },
@@ -104,6 +74,8 @@ const App: React.FC = () => {
     return false;
   });
 
+  const [showAdmin, setShowAdmin] = useState(false);
+
   useEffect(() => {
     const root = document.documentElement;
     if (isDarkMode) {
@@ -116,7 +88,7 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   const [assets, setAssets] = useState<Asset[]>(() => {
-    const saved = localStorage.getItem('userAssets');
+    const saved = localStorage.getItem('userAssets_v2');
     if (saved) {
         try {
             return JSON.parse(saved);
@@ -143,6 +115,7 @@ const App: React.FC = () => {
   const [editingShares, setEditingShares] = useState('');
   const [editingAmount, setEditingAmount] = useState(''); // 总投入金额
   const [editingCostPrice, setEditingCostPrice] = useState('');
+  const [editingFeeRate, setEditingFeeRate] = useState('0.15'); // 申购费率 (%)
   const [isRecognizing, setIsRecognizing] = useState(false); // AI识别中
   const [recognitionError, setRecognitionError] = useState('');
 
@@ -152,7 +125,7 @@ const App: React.FC = () => {
   }, [assets]);
   
   useEffect(() => {
-      localStorage.setItem('userAssets', JSON.stringify(assets));
+      localStorage.setItem('userAssets_v2', JSON.stringify(assets));
       // Debounce save to cloud
       const timer = setTimeout(() => {
           if (assets.length > 0 && assets !== INITIAL_ASSETS) {
@@ -170,7 +143,7 @@ const App: React.FC = () => {
           if (remoteAssets && remoteAssets.length > 0) {
                // Simple merge strategy: if local is default, take remote.
                // Otherwise, we might prompt user, but for now let's just log it or auto-merge if local is empty/default
-               const localSaved = localStorage.getItem('userAssets');
+               const localSaved = localStorage.getItem('userAssets_v2');
                if (!localSaved || JSON.parse(localSaved).length === INITIAL_ASSETS.length) {
                    setAssets(remoteAssets);
                    console.log('Restored assets from cloud');
@@ -191,7 +164,7 @@ const App: React.FC = () => {
 
   const selectedAsset = assets.find(a => a.id === selectedAssetId) || filteredAssets[0] || assets[0];
 
-  const getMarketStatus = (asset: Asset) => {
+  const getMarketStatus = (asset: Asset | undefined) => {
     const now = new Date();
     const day = now.getDay();
     const minutes = now.getHours() * 60 + now.getMinutes();
@@ -199,6 +172,8 @@ const App: React.FC = () => {
     const closedStyle = 'text-slate-500 bg-slate-100/50 dark:bg-slate-800/50 dark:text-slate-400';
     const tradingStyle = 'text-blue-600 bg-blue-50/50 dark:text-blue-400 dark:bg-blue-900/30';
     const waitingStyle = 'text-amber-600 bg-amber-50/50 dark:text-amber-400 dark:bg-amber-900/30';
+
+    if (!asset) return { label: '未选择', color: closedStyle, icon: <Moon size={14} />, spinning: false };
 
     if (day === 0 || day === 6) return { label: '已休市', color: closedStyle, icon: <Moon size={14} />, spinning: false };
 
@@ -455,7 +430,7 @@ const App: React.FC = () => {
       setAssets(INITIAL_ASSETS);
       // Clear specific localstorage to ensure clean state on reload if needed, 
       // but state update handles immediate UI.
-      localStorage.setItem('userAssets', JSON.stringify(INITIAL_ASSETS));
+      localStorage.setItem('userAssets_v2', JSON.stringify(INITIAL_ASSETS));
   };
 
   // Handle image upload and recognition
@@ -572,6 +547,9 @@ const App: React.FC = () => {
                 <RefreshCw size={18} className={`transition-all ${isRefreshing ? "animate-spin text-blue-600 dark:text-blue-400" : "group-hover:rotate-180"}`} />
             </button>
 
+            <button onClick={() => setShowAdmin(true)} className="p-2.5 glass-button rounded-full text-slate-600 dark:text-slate-300 relative group" title="管理后台">
+                <Server size={18} />
+            </button>
             <button onClick={() => setShowSettings(!showSettings)} className="p-2.5 glass-button rounded-full text-slate-600 dark:text-slate-300"><Settings size={18} /></button>
             <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-2 bg-blue-600/90 hover:bg-blue-600 text-white px-5 py-2.5 rounded-full font-bold transition-all shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-105 active:scale-95 backdrop-blur-sm border border-white/20"><Plus size={18} /><span className="hidden sm:inline">添加资产</span></button>
         </div>
@@ -579,44 +557,103 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 flex overflow-hidden relative pt-16">
-        <aside className={`absolute inset-y-0 left-0 z-20 w-full sm:w-[380px] glass-panel border-r-0 sm:border-r border-white/40 dark:border-white/5 flex flex-col transform transition-transform duration-300 sm:relative sm:translate-x-0 ${showMobileDetail ? '-translate-x-full' : 'translate-x-0'}`}>
+        <aside className={`absolute inset-y-0 left-0 z-20 w-full sm:w-[360px] glass-panel border-r-0 sm:border-r border-white/40 dark:border-white/5 flex flex-col transform transition-transform duration-300 sm:relative sm:translate-x-0 ${showMobileDetail ? '-translate-x-full' : 'translate-x-0'} ${assets.length === 0 ? 'hidden' : ''}`}>
             <div className="p-3 bg-white/20 dark:bg-slate-900/20 backdrop-blur-md border-b border-white/30 dark:border-white/5 text-xs text-center text-slate-500 dark:text-slate-400 flex justify-between items-center font-medium">
                 <span className="bg-white/30 dark:bg-white/5 px-2 py-1 rounded-lg">{DATA_SOURCES.find(d => d.id === dataSource)?.label}</span>
                 <span className="flex items-center gap-1.5"><Clock size={12} /> {refreshInterval > 0 ? `${refreshInterval/1000}s` : 'Manual'}</span>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                {filteredAssets.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-48 text-slate-500/50">
-                        <Layers size={48} className="mb-2 opacity-20" />
-                        <p className="text-sm font-medium">暂无资产</p>
-                    </div>
-                ) : (
-                    filteredAssets.map(asset => (
-                        <AssetCard key={asset.id} asset={asset} isActive={asset.id === selectedAssetId} onClick={(a) => { setSelectedAssetId(a.id); setShowMobileDetail(true); }} />
-                    ))
-                )}
+            <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-hide">
+                {filteredAssets.map(asset => (
+                    <AssetCard key={asset.id} asset={asset} isActive={asset.id === selectedAssetId} onClick={(a) => { setSelectedAssetId(a.id); setShowMobileDetail(true); }} />
+                ))}
             </div>
         </aside>
 
         {/* Right Side Vertical Navigation */}
-        <div className="fixed right-6 top-1/2 -translate-y-1/2 z-30 hidden sm:flex flex-col gap-3">
-            {categories.map(cat => (
-                <button
-                    key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`group flex flex-col items-center justify-center gap-2 py-4 px-3 rounded-2xl transition-all duration-300 ${activeCategory === cat.id ? 'text-blue-600 dark:text-blue-400 bg-white/80 dark:bg-slate-800/80 shadow-xl scale-110' : 'text-slate-500 dark:text-slate-400 bg-white/50 dark:bg-slate-900/50 hover:bg-white/70 dark:hover:bg-slate-800/70 backdrop-blur-xl'} backdrop-blur-xl border border-white/40 dark:border-white/10`}
-                >
-                    <div className={`p-2 rounded-xl transition-all duration-300 ${activeCategory === cat.id ? 'bg-blue-500/10' : 'bg-transparent group-hover:bg-white/30'}`}>
-                        <cat.icon size={24} className={activeCategory === cat.id ? 'stroke-[2.5px]' : 'stroke-2'} />
-                    </div>
-                    <span className="text-[10px] font-bold tracking-wide">{cat.label}</span>
-                </button>
-            ))}
-        </div>
+        {assets.length > 0 && (
+            <div className="fixed right-6 top-1/2 -translate-y-1/2 z-30 hidden sm:flex flex-col gap-3">
+                {categories.map(cat => (
+                    <button
+                        key={cat.id}
+                        onClick={() => setActiveCategory(cat.id)}
+                        className={`group flex flex-col items-center justify-center gap-2 py-4 px-3 rounded-2xl transition-all duration-300 ${activeCategory === cat.id ? 'text-blue-600 dark:text-blue-400 bg-white/80 dark:bg-slate-800/80 shadow-xl scale-110' : 'text-slate-500 dark:text-slate-400 bg-white/50 dark:bg-slate-900/50 hover:bg-white/70 dark:hover:bg-slate-800/70 backdrop-blur-xl'} backdrop-blur-xl border border-white/40 dark:border-white/10`}
+                    >
+                        <div className={`p-2 rounded-xl transition-all duration-300 ${activeCategory === cat.id ? 'bg-blue-500/10' : 'bg-transparent group-hover:bg-white/30'}`}>
+                            <cat.icon size={24} className={activeCategory === cat.id ? 'stroke-[2.5px]' : 'stroke-2'} />
+                        </div>
+                        <span className="text-[10px] font-bold tracking-wide">{cat.label}</span>
+                    </button>
+                ))}
+            </div>
+        )}
 
-        <section className={`flex-1 flex flex-col h-full overflow-y-auto relative z-10 transition-opacity duration-300 p-4 sm:p-6 lg:p-10 ${showMobileDetail ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none sm:opacity-100 sm:pointer-events-auto'}`}>
+        <section className={`flex-1 flex flex-col h-full overflow-y-auto relative z-10 transition-opacity duration-300 p-4 sm:p-6 lg:p-10 ${showMobileDetail || assets.length === 0 || activeCategory === 'backend' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none sm:opacity-100 sm:pointer-events-auto'}`}>
             {activeCategory === 'backend' ? (
+                 <AdminDashboard 
+                    assets={assets} 
+                    onDeleteAsset={removeAsset}
+                    onAddAsset={() => setIsAddModalOpen(true)}
+                    dataSource={dataSource}
+                    setDataSource={setDataSource}
+                    refreshInterval={refreshInterval}
+                    setRefreshInterval={setRefreshInterval}
+
+                    isDarkMode={isDarkMode}
+                    setIsDarkMode={setIsDarkMode}
+                    onResetAssets={resetAssets}
+                 />
+            ) : assets.length === 0 ? (
+                // --- Welcome / Empty State ---
+                <div className="flex flex-col items-center justify-center h-full sm:min-h-[600px] animate-fade-in text-center p-6">
+                    <div className="relative w-32 h-32 mb-8 group">
+                        <div className="absolute inset-0 bg-blue-500/20 rounded-full blur-2xl animate-pulse-slow group-hover:bg-blue-500/30 transition-all"></div>
+                        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-white/40 to-transparent dark:from-white/10 rounded-b-full backdrop-blur-sm"></div>
+                        <div className="relative w-full h-full glass-card rounded-[2.5rem] flex items-center justify-center shadow-2xl border-2 border-white/40 transform group-hover:scale-105 transition-transform duration-500">
+                             <Plus size={48} className="text-blue-600 dark:text-blue-400" strokeWidth={3} />
+                        </div>
+                    </div>
+                    
+                    <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-white mb-4 tracking-tight">
+                        开启您的财富追踪
+                    </h2>
+                    <p className="text-slate-500 dark:text-slate-400 max-w-md text-lg mb-10 leading-relaxed">
+                        您的投资组合当前为空。添加第一个基金或股票，实时监控净值涨跌与持仓收益。
+                    </p>
+                    
+                    <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm">
+                        <button 
+                            onClick={() => setIsAddModalOpen(true)}
+                            className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-4 px-8 rounded-2xl font-bold text-lg shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50 transform hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3"
+                        >
+                            <Plus size={24} strokeWidth={3} />
+                            添加资产
+                        </button>
+                        <button 
+                            onClick={() => setShowAdmin(true)}
+                            className="flex-1 glass-button py-4 px-8 rounded-2xl font-bold text-lg text-slate-700 dark:text-slate-200 hover:bg-white/60 dark:hover:bg-white/10 transition-all flex items-center justify-center gap-3"
+                        >
+                            <Server size={20} />
+                            管理后台
+                        </button>
+                    </div>
+
+                    <div className="mt-16 sm:mt-24 grid grid-cols-3 gap-8 sm:gap-16 opacity-60">
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-12 h-12 rounded-2xl bg-blue-100/50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600"><Activity size={24} /></div>
+                            <span className="text-xs font-bold text-slate-500">实时估值</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-12 h-12 rounded-2xl bg-indigo-100/50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600"><PieChart size={24} /></div>
+                            <span className="text-xs font-bold text-slate-500">持仓分析</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-12 h-12 rounded-2xl bg-rose-100/50 dark:bg-rose-900/30 flex items-center justify-center text-rose-600"><Zap size={24} /></div>
+                            <span className="text-xs font-bold text-slate-500">毫秒级刷新</span>
+                        </div>
+                    </div>
+                </div>
+            ) : activeCategory === 'backend' ? (
                  <AdminDashboard 
                     assets={assets} 
                     onDeleteAsset={removeAsset}
@@ -944,34 +981,68 @@ const App: React.FC = () => {
                             <>
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">总投入金额（元）</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="例如: 10000"
-                                        className="w-full glass-input rounded-2xl py-3 px-4 font-medium text-lg placeholder:text-slate-400/80 transition-all shadow-inner"
-                                        value={editingAmount}
-                                        onChange={e => setEditingAmount(e.target.value)}
-                                        autoFocus
-                                    />
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">你总共投入了多少钱</p>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-3.5 text-slate-400">¥</span>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="0.00"
+                                            className="w-full glass-input rounded-2xl py-3 pl-8 pr-4 font-mono font-bold text-lg placeholder:text-slate-400/80 transition-all shadow-inner"
+                                            value={editingAmount}
+                                            onChange={e => setEditingAmount(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">系统将自动扣除手续费后计算份额</p>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">买入均价（元）</label>
-                                    <input
-                                        type="number"
-                                        step="0.0001"
-                                        placeholder="例如: 1.5000"
-                                        className="w-full glass-input rounded-2xl py-3 px-4 font-medium text-lg placeholder:text-slate-400/80 transition-all shadow-inner"
-                                        value={editingCostPrice}
-                                        onChange={e => setEditingCostPrice(e.target.value)}
-                                    />
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">买入时的基金净值</p>
+
+                                <div className="flex gap-4">
+                                    <div className="flex-1">
+                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">持仓成本价</label>
+                                        <input
+                                            type="number"
+                                            step="0.0001"
+                                            placeholder={`当前: ${selectedAsset.currentValue}`}
+                                            className="w-full glass-input rounded-2xl py-3 px-4 font-mono font-bold text-lg placeholder:text-slate-400/80 transition-all shadow-inner"
+                                            value={editingCostPrice}
+                                            onChange={e => setEditingCostPrice(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="w-1/3">
+                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">申购费率(%)</label>
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                placeholder="0.15"
+                                                className="w-full glass-input rounded-2xl py-3 px-3 font-mono font-bold text-lg placeholder:text-slate-400/80 transition-all shadow-inner text-center"
+                                                value={editingFeeRate}
+                                                onChange={e => setEditingFeeRate(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
+
                                 {editingAmount && editingCostPrice && parseFloat(editingAmount) > 0 && parseFloat(editingCostPrice) > 0 && (
-                                    <div className="glass-card p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/20 border border-blue-200/50 dark:border-blue-700/50">
-                                        <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">自动计算份额</div>
-                                        <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                                            {(parseFloat(editingAmount) / parseFloat(editingCostPrice)).toFixed(2)} 份
+                                    <div className="glass-card p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200/50 dark:border-blue-700/50 animate-fade-in-up space-y-2">
+                                        <div className="flex justify-between items-center pb-2 border-b border-blue-100 dark:border-blue-800/30">
+                                            <div className="text-xs text-slate-500">计算明细</div>
+                                            <div className="text-xs text-blue-600 font-bold bg-blue-100 px-2 py-0.5 rounded">自动计算</div>
+                                        </div>
+                                        <div className="flex justify-between text-xs text-slate-500">
+                                            <span>预估手续费:</span>
+                                            <span className="font-mono">¥{(parseFloat(editingAmount) * (parseFloat(editingFeeRate || '0') / 100)).toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-xs text-slate-500">
+                                            <span>净申购金额:</span>
+                                            <span className="font-mono">¥{(parseFloat(editingAmount) * (1 - parseFloat(editingFeeRate || '0') / 100)).toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-end pt-1">
+                                            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">最终持有份额:</span>
+                                            <div className="text-2xl font-bold text-slate-800 dark:text-white font-mono tracking-tight leading-none">
+                                                {((parseFloat(editingAmount) * (1 - parseFloat(editingFeeRate || '0') / 100)) / parseFloat(editingCostPrice)).toFixed(2)} 
+                                                <span className="text-sm text-slate-400 ml-1 font-normal">份</span>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -983,39 +1054,51 @@ const App: React.FC = () => {
                                     <input
                                         type="number"
                                         step="0.01"
-                                        placeholder="例如: 1000.50"
-                                        className="w-full glass-input rounded-2xl py-3 px-4 font-medium text-lg placeholder:text-slate-400/80 transition-all shadow-inner"
+                                        placeholder="0.00"
+                                        className="w-full glass-input rounded-2xl py-3 px-4 font-mono font-bold text-lg placeholder:text-slate-400/80 transition-all shadow-inner"
                                         value={editingShares}
                                         onChange={e => setEditingShares(e.target.value)}
                                         autoFocus
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">成本价（元）</label>
+                                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">持仓成本价（元）</label>
                                     <input
                                         type="number"
                                         step="0.0001"
-                                        placeholder="例如: 1.5000"
-                                        className="w-full glass-input rounded-2xl py-3 px-4 font-medium text-lg placeholder:text-slate-400/80 transition-all shadow-inner"
+                                        placeholder={`当前净值: ${selectedAsset.currentValue}`}
+                                        className="w-full glass-input rounded-2xl py-3 px-4 font-mono font-bold text-lg placeholder:text-slate-400/80 transition-all shadow-inner"
                                         value={editingCostPrice}
                                         onChange={e => setEditingCostPrice(e.target.value)}
                                     />
                                 </div>
+                                {editingShares && editingCostPrice && parseFloat(editingShares) > 0 && parseFloat(editingCostPrice) > 0 && (
+                                    <div className="glass-card p-4 rounded-2xl bg-purple-50/50 dark:bg-purple-900/10 border border-purple-200/50 dark:border-purple-700/50 animate-fade-in-up">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <div className="text-xs text-slate-500">计算结果 (总投入)</div>
+                                            <div className="text-xs text-purple-600 font-bold bg-purple-100 px-2 py-0.5 rounded">自动计算</div>
+                                        </div>
+                                        <div className="text-2xl font-bold text-slate-800 dark:text-white font-mono tracking-tight">
+                                            <span className="text-lg mr-0.5">¥</span>
+                                            {(parseFloat(editingShares) * parseFloat(editingCostPrice)).toFixed(2)}
+                                        </div>
+                                    </div>
+                                )}
                             </>
                         )}
                         
-                        <div className="flex gap-3 pt-4">
+                        <div className="flex gap-3 pt-6">
                             <button
                                 onClick={() => setIsEditPortfolioOpen(false)}
-                                className="flex-1 glass-button py-3 rounded-2xl font-bold text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-white/5 transition-all"
+                                className="flex-1 glass-button py-3.5 rounded-2xl font-bold text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-white/5 transition-all text-sm"
                             >
                                 取消
                             </button>
                             <button
                                 onClick={savePortfolio}
-                                className="flex-1 bg-blue-600/90 hover:bg-blue-600 text-white py-3 rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50"
+                                className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transform hover:scale-[1.02] active:scale-[0.98] text-sm"
                             >
-                                保存
+                                保存并更新
                             </button>
                         </div>
                     </div>
@@ -1037,6 +1120,34 @@ const App: React.FC = () => {
             </div>
         )}
       </main>
+
+      {/* Admin Dashboard Overlay */}
+      {showAdmin && (
+          <div className="fixed inset-0 z-[100] bg-slate-100/90 dark:bg-black/90 backdrop-blur-xl transition-all animate-in slide-in-from-bottom-10 duration-500">
+              <div className="absolute top-4 right-6 z-50">
+                  <button 
+                      onClick={() => setShowAdmin(false)}
+                      className="p-3 bg-white/20 hover:bg-white/40 rounded-full text-slate-800 dark:text-white transition-all shadow-lg border border-white/20"
+                  >
+                      <X size={24} />
+                  </button>
+              </div>
+              <div className="h-full p-4 sm:p-8">
+                  <AdminDashboard 
+                      assets={assets}
+                      onDeleteAsset={removeAsset}
+                      onAddAsset={() => { setShowAdmin(false); setIsAddModalOpen(true); }}
+                      dataSource={dataSource}
+                      setDataSource={setDataSource}
+                      refreshInterval={refreshInterval}
+                      setRefreshInterval={setRefreshInterval}
+                      isDarkMode={isDarkMode}
+                      setIsDarkMode={setIsDarkMode}
+                      onResetAssets={resetAssets}
+                  />
+              </div>
+          </div>
+      )}
     </div>
   );
 };

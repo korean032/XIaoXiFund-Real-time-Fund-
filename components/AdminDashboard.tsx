@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Asset, DataSource } from '../types';
 import { 
     LayoutDashboard, Database, Settings, Server, Activity, 
     Trash2, Search, Plus, AlertCircle, CheckCircle2, Clock, ScrollText,
-    BarChart3, HardDrive, RefreshCw
+    BarChart3, HardDrive, RefreshCw, X, ChevronRight, Zap, Target,
+    PieChart as PieChartIcon, ArrowUpRight, ArrowDownRight, MoreHorizontal
 } from 'lucide-react';
+import { 
+    PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend 
+} from 'recharts';
 
 interface AdminDashboardProps {
     assets: Asset[];
@@ -19,6 +23,45 @@ interface AdminDashboardProps {
     onResetAssets: () => void;
 }
 
+// --- Sub-Components ---
+
+const StatCard = ({ title, value, subtext, icon: Icon, color, trend }: any) => (
+    <div className="relative overflow-hidden glass-card p-6 rounded-3xl border border-white/20 group hover:scale-[1.02] transition-all duration-300">
+        <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full ${color} opacity-10 group-hover:scale-150 transition-transform duration-500`} />
+        <div className="relative z-10">
+            <div className="flex justify-between items-start mb-4">
+                <div className={`p-3 rounded-2xl ${color} bg-opacity-10 text-opacity-100 backdrop-blur-md`}>
+                    <Icon size={24} className={color.replace('bg-', 'text-')} />
+                </div>
+                {trend && (
+                    <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${trend >= 0 ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'}`}>
+                        {trend >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                        {Math.abs(trend)}%
+                    </div>
+                )}
+            </div>
+            <div className="text-3xl font-bold text-slate-800 dark:text-white mb-1 tracking-tight">{value}</div>
+            <div className="text-sm text-slate-500 dark:text-slate-400 font-medium">{subtext}</div>
+            <div className="text-xs text-slate-400 mt-1">{title}</div>
+        </div>
+    </div>
+);
+
+const IconButton = ({ onClick, icon: Icon, className = "", danger = false }: any) => (
+    <button 
+        onClick={onClick}
+        className={`p-2 rounded-xl transition-all duration-200 ${
+            danger 
+            ? 'text-red-400 hover:bg-red-500/10 hover:text-red-500' 
+            : 'text-slate-400 hover:bg-slate-500/10 hover:text-slate-600 dark:hover:text-slate-200'
+        } ${className}`}
+    >
+        <Icon size={18} />
+    </button>
+);
+
+// --- Main Component ---
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
     assets, 
     onDeleteAsset, 
@@ -31,451 +74,455 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsDarkMode,
     onResetAssets
 }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'service' | 'settings' | 'logs' | 'database'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'service' | 'settings'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
     const [serviceLatency, setServiceLatency] = useState<number | null>(null);
     const [logs, setLogs] = useState<{time: string, type: 'info'|'warn'|'error', msg: string}[]>([]);
-    const [dbStats, setDbStats] = useState({ size: '0 KB', count: 0, integrity: 'Unknown' });
 
-    // Mock Logs Generator
-    useEffect(() => {
-        const addLog = () => {
-            const types: ('info'|'warn'|'error')[] = ['info', 'info', 'info', 'warn'];
-            const msgs = [
-                'Syncing asset prices...',
-                'Batch update completed in 120ms',
-                'Heartbeat check: OK',
-                'Cache cleared',
-                'Websocket connection stable',
-                'Verifying data integrity...'
-            ];
-            const newLog = {
-                time: new Date().toLocaleTimeString(),
-                type: types[Math.floor(Math.random() * types.length)],
-                msg: msgs[Math.floor(Math.random() * msgs.length)]
-            };
-            setLogs(prev => [newLog, ...prev].slice(0, 50));
-        };
-        const timer = setInterval(addLog, 3000);
-        return () => clearInterval(timer);
-    }, []);
+    // Analytics Data
+    const categoryData = useMemo(() => {
+        const counts = { fund: 0, index: 0, stock: 0 };
+        assets.forEach(a => {
+            if (a.category in counts) counts[a.category as keyof typeof counts]++;
+        });
+        return [
+            { name: '基金', value: counts.fund, color: '#3b82f6' },
+            { name: '指数', value: counts.index, color: '#8b5cf6' },
+            { name: '股票', value: counts.stock, color: '#f59e0b' }
+        ].filter(d => d.value > 0);
+    }, [assets]);
 
-    // Health Check
+    // Batch Operations
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedAssets(new Set(assets.map(a => a.id)));
+        } else {
+            setSelectedAssets(new Set());
+        }
+    };
+
+    const handleSelectOne = (id: string, checked: boolean) => {
+        const newSet = new Set(selectedAssets);
+        if (checked) newSet.add(id);
+        else newSet.delete(id);
+        setSelectedAssets(newSet);
+    };
+
+    const handleBatchDelete = () => {
+        if (confirm(`确定要删除选中的 ${selectedAssets.size} 个资产吗？`)) {
+            selectedAssets.forEach(id => onDeleteAsset(id));
+            setSelectedAssets(new Set());
+            addLog('warn', `Batch deleted ${selectedAssets.size} assets`);
+        }
+    };
+
+    // Logging & Health
+    const addLog = (type: 'info'|'warn'|'error', msg: string) => {
+        setLogs(prev => [{
+            time: new Date().toLocaleTimeString(),
+            type,
+            msg
+        }, ...prev].slice(0, 100));
+    };
+
     useEffect(() => {
         const checkHealth = async () => {
             const start = performance.now();
             try {
-                await new Promise(r => setTimeout(r, Math.random() * 200 + 50));
-                setServiceLatency(Math.floor(performance.now() - start));
+                // Simulate checking API latency
+                await new Promise(r => setTimeout(r, Math.random() * 50 + 20)); 
+                const latency = Math.floor(performance.now() - start);
+                setServiceLatency(latency);
+                if (Math.random() > 0.95) addLog('info', `Health check passed: ${latency}ms`);
             } catch (e) {
                 setServiceLatency(-1);
+                addLog('error', 'Health check failed');
             }
         };
-
-        if (activeTab === 'service' || activeTab === 'overview') {
-            checkHealth();
-            const timer = setInterval(checkHealth, 5000);
-            return () => clearInterval(timer);
-        }
-    }, [activeTab]);
-    
-    // DB Check
-    useEffect(() => {
-        if (activeTab === 'database') {
-            const checkDB = () => {
-                try {
-                    const data = localStorage.getItem('userAssets');
-                    const size = data ? (data.length * 2 / 1024).toFixed(2) : '0';
-                    const parsed = data ? JSON.parse(data) : [];
-                    setDbStats({
-                        size: `${size} KB`,
-                        count: parsed.length,
-                        integrity: Array.isArray(parsed) ? 'Valid' : 'Corrupted'
-                    });
-                } catch(e) {
-                    setDbStats({ size: 'Error', count: 0, integrity: 'Corrupted' });
-                }
-            };
-            checkDB();
-        }
-    }, [activeTab, assets]);
+        const timer = setInterval(checkHealth, 5000);
+        return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const filteredAssets = assets.filter(a => 
         a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
         a.code.includes(searchTerm)
     );
 
-    const handleExport = () => {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(assets, null, 2));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", "fund_assets_backup.json");
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-        setLogs(prev => [{time: new Date().toLocaleTimeString(), type: 'info', msg: 'Assets exported successfully'}, ...prev]);
-    };
-
     return (
-        <div className="flex h-full w-full max-w-7xl mx-auto glass-panel rounded-[2rem] overflow-hidden border border-white/20 shadow-2xl">
-            {/* Sidebar */}
-            <div className="w-64 bg-slate-900/5 dark:bg-black/20 border-r border-white/10 flex flex-col p-4 backdrop-blur-md">
-                <div className="flex items-center gap-3 px-4 py-6 mb-6">
-                    <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
-                        <Server size={20} />
+        <div className="flex h-full w-full max-w-[90vw] mx-auto glass-panel rounded-[2.5rem] overflow-hidden border border-white/20 shadow-2xl bg-white/40 dark:bg-black/40 backdrop-blur-2xl transition-all duration-500">
+            {/* Sidebar Navigation */}
+            <div className="w-20 lg:w-72 bg-white/10 dark:bg-black/10 border-r border-white/10 flex flex-col p-4 backdrop-blur-md transition-all duration-300">
+                <div className="flex items-center gap-4 px-2 py-6 mb-6">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30 shrink-0">
+                        <LayoutDashboard size={24} />
                     </div>
-                    <div>
-                        <h2 className="font-bold text-slate-800 dark:text-white">控制台</h2>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Backend Service</p>
+                    <div className="hidden lg:block overflow-hidden">
+                        <h2 className="font-bold text-lg text-slate-800 dark:text-white whitespace-nowrap">Admin One</h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">v2.0 Liquid Glass</p>
                     </div>
                 </div>
 
                 <nav className="space-y-2 flex-1">
                     {[
-                        { id: 'overview', icon: LayoutDashboard, label: '概览' },
-                        { id: 'assets', icon: BarChart3, label: '资产管理' },
-                        { id: 'service', icon: Activity, label: '服务监控' },
-                        { id: 'logs', icon: ScrollText, label: '系统日志' },
-                        { id: 'settings', icon: Settings, label: '系统设置' },
-                        { id: 'database', icon: Database, label: '数据库' },
+                        { id: 'overview', icon: PieChartIcon, label: '仪表盘' },
+                        { id: 'assets', icon: Database, label: '资产管理' },
+                        { id: 'service', icon: Server, label: '系统状态' },
+                        { id: 'settings', icon: Settings, label: '设置' },
                     ].map(item => (
                         <button 
                             key={item.id}
                             //@ts-ignore
                             onClick={() => setActiveTab(item.id)}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${activeTab === item.id ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 hover:bg-white/10'}`}
+                            className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl font-medium transition-all duration-300 group ${
+                                activeTab === item.id 
+                                ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20' 
+                                : 'text-slate-600 dark:text-slate-400 hover:bg-white/10 dark:hover:bg-white/5'
+                            }`}
                         >
-                            <item.icon size={18} />
-                            {item.label}
+                            <item.icon size={22} className={`transition-transform duration-300 ${activeTab === item.id ? 'scale-110' : 'group-hover:scale-110'}`} />
+                            <span className="hidden lg:block">{item.label}</span>
+                            {activeTab === item.id && <div className="ml-auto hidden lg:block w-1.5 h-1.5 rounded-full bg-white/50" />}
                         </button>
                     ))}
                 </nav>
 
-                <div className="p-4 bg-slate-100/50 dark:bg-slate-800/50 rounded-xl mt-auto">
-                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
-                        <div className={`w-2 h-2 rounded-full ${serviceLatency && serviceLatency > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                        系统状态: {serviceLatency && serviceLatency > 0 ? '正常' : '异常'}
-                    </div>
-                    <div className="text-xs text-slate-400">v1.3.1 (Pro)</div>
+                <div className="p-4 rounded-2xl bg-slate-900/5 dark:bg-white/5 mt-auto hidden lg:block">
+                     <div className="flex items-center gap-2 mb-2">
+                        <div className={`w-2 h-2 rounded-full ${serviceLatency && serviceLatency > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                        <span className="text-xs font-bold text-slate-500">API Status</span>
+                     </div>
+                     <div className="text-xs font-mono text-slate-400 truncate">
+                        Latency: {serviceLatency}ms
+                     </div>
                 </div>
             </div>
 
-            {/* Main Content */}
-            <div className="flex-1 overflow-y-auto bg-white/30 dark:bg-slate-900/30 p-8">
-                {activeTab === 'overview' && (
-                    <div className="space-y-6 animate-fade-in">
-                        <header className="mb-8">
-                            <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">系统概览</h1>
-                            <p className="text-slate-500 dark:text-slate-400">实时监控系统运行状态与资产分布。</p>
-                        </header>
+            {/* Main Content Area */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide bg-gradient-to-br from-slate-50/50 to-slate-100/50 dark:from-slate-900/50 dark:to-black/50 p-6 lg:p-10">
+                
+                {/* Header */}
+                <header className="flex justify-between items-center mb-10 animate-fade-in">
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-1 tracking-tight">
+                            {activeTab === 'overview' && '仪表盘'}
+                            {activeTab === 'assets' && '资产管理'}
+                            {activeTab === 'service' && '系统状态'}
+                            {activeTab === 'settings' && '设置'}
+                        </h1>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm">欢迎回来，今日市场行情波动较大。</p>
+                    </div>
+                </header>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="glass-card p-6 rounded-2xl border border-white/40">
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="p-3 bg-blue-500/10 text-blue-600 rounded-xl"><Database size={24} /></div>
-                                    <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full">ACTIVE</span>
-                                </div>
-                                <div className="text-3xl font-bold text-slate-800 dark:text-white mb-1">{assets.length}</div>
-                                <div className="text-sm text-slate-500">监控资产总数</div>
-                            </div>
-                            <div className="glass-card p-6 rounded-2xl border border-white/40">
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="p-3 bg-purple-500/10 text-purple-600 rounded-xl"><Server size={24} /></div>
-                                    <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">EASTMONEY</span>
-                                </div>
-                                <div className="text-3xl font-bold text-slate-800 dark:text-white mb-1">{serviceLatency ? `${serviceLatency}ms` : '--'}</div>
-                                <div className="text-sm text-slate-500">API 响应延迟</div>
-                            </div>
-                            <div className="glass-card p-6 rounded-2xl border border-white/40">
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="p-3 bg-amber-500/10 text-amber-600 rounded-xl"><Clock size={24} /></div>
-                                </div>
-                                <div className="text-3xl font-bold text-slate-800 dark:text-white mb-1">{refreshInterval === 0 ? 'Manual' : (refreshInterval / 1000) + 's'}</div>
-                                <div className="text-sm text-slate-500">数据刷新频率</div>
-                            </div>
+                {/* OVERVIEW TAB */}
+                {activeTab === 'overview' && (
+                    <div className="space-y-8 animate-fade-in-up">
+                        {/* Stats Row */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <StatCard 
+                                title="总监控资产" 
+                                value={assets.length} 
+                                subtext="个活跃资产" 
+                                icon={Target} 
+                                color="bg-blue-500" 
+                            />
+                            <StatCard 
+                                title="系统响应" 
+                                value={`${serviceLatency || '--'}ms`} 
+                                subtext="API 低延迟" 
+                                icon={Zap} 
+                                color="bg-amber-500" 
+                            />
+                            <StatCard 
+                                title="数据刷新" 
+                                value={refreshInterval === 0 ? 'Manual' : `${refreshInterval/1000}s`} 
+                                subtext="自动同步中" 
+                                icon={RefreshCw} 
+                                color="bg-emerald-500" 
+                            />
+                            <StatCard 
+                                title="最后更新" 
+                                value={new Date().getHours() + ':' + String(new Date().getMinutes()).padStart(2, '0')} 
+                                subtext="刚刚" 
+                                icon={Clock} 
+                                color="bg-purple-500" 
+                            />
                         </div>
 
-                        {/* Recent Activity Log Placeholder */}
-                        <div className="glass-card rounded-2xl border border-white/40 overflow-hidden">
-                            <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center">
-                                <h3 className="font-bold text-slate-800 dark:text-white">最新系统日志</h3>
-                                <button onClick={() => setActiveTab('logs')} className="text-xs text-blue-600 font-bold hover:underline">查看全部</button>
+                        {/* Charts Section */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            {/* Asset Distribution */}
+                            <div className="lg:col-span-2 glass-card p-8 rounded-3xl border border-white/20">
+                                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6">资产分布分析</h3>
+                                <div className="h-64 w-full flex items-center justify-center">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={categoryData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={60}
+                                                outerRadius={100}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                            >
+                                                {categoryData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                                                ))}
+                                            </Pie>
+                                            <RechartsTooltip 
+                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.2)' }} 
+                                            />
+                                            <Legend verticalAlign="middle" align="right" layout="vertical" />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
                             </div>
-                            <div className="p-6 space-y-4">
-                                {logs.slice(0, 3).map((log, i) => (
-                                    <div key={i} className="flex items-center gap-4 text-sm">
-                                        <span className="text-slate-400 font-mono text-xs w-20">{log.time}</span>
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold w-12 text-center uppercase ${log.type === 'info' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{log.type}</span>
-                                        <span className="text-slate-600 dark:text-slate-300">{log.msg}</span>
+
+                            {/* Recent Logs (Mini) */}
+                            <div className="glass-card p-6 rounded-3xl border border-white/20 flex flex-col">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="font-bold text-slate-800 dark:text-white">实时日志</h3>
+                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-ping"></span>
+                                </div>
+                                <div className="flex-1 overflow-hidden relative">
+                                    <div className="absolute inset-x-0 top-0 h-4 bg-gradient-to-b from-white/10 to-transparent z-10"/>
+                                    <div className="overflow-y-auto h-full space-y-3 pr-2 scrollbar-thin">
+                                        {logs.slice(0, 10).map((log, i) => (
+                                            <div key={i} className="flex gap-3 text-xs">
+                                                <span className="font-mono text-slate-400 opacity-70 w-12">{log.time.split(':')[2]}s</span>
+                                                <span className={`font-bold ${
+                                                    log.type === 'error' ? 'text-red-500' : 
+                                                    log.type === 'warn' ? 'text-amber-500' : 
+                                                    'text-blue-500'
+                                                }`}>{log.type.toUpperCase()}</span>
+                                                <span className="text-slate-600 dark:text-slate-300 truncate">{log.msg}</span>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
+                                    <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white/10 to-transparent pointer-events-none"/>
+                                </div>
                             </div>
                         </div>
                     </div>
                 )}
 
+                {/* ASSETS TAB */}
                 {activeTab === 'assets' && (
-                    <div className="space-y-6 animate-fade-in">
-                        <header className="flex justify-between items-end mb-8">
-                            <div>
-                                <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">资产管理</h1>
-                                <p className="text-slate-500 dark:text-slate-400">管理您的投资组合与监控列表。</p>
-                            </div>
-                             <div className="flex items-center gap-3">
-                                <div className="relative">
+                    <div className="space-y-6 animate-fade-in-up">
+                        {/* Toolbar */}
+                        <div className="flex flex-wrap gap-4 justify-between items-center bg-white/5 dark:bg-black/5 p-4 rounded-2xl backdrop-blur-sm border border-white/10">
+                            <div className="flex items-center gap-3 flex-1 min-w-[200px]">
+                                <div className="relative flex-1 max-w-md">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                     <input 
                                         type="text" 
-                                        placeholder="搜索资产..." 
+                                        placeholder="搜索资产名称或代码..." 
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="pl-10 pr-4 py-2 bg-white/50 dark:bg-black/20 border border-white/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 w-64 text-sm"
+                                        className="w-full pl-10 pr-4 py-2.5 bg-white/50 dark:bg-black/20 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm transition-all"
                                     />
                                 </div>
-                                <button onClick={onAddAsset} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/30 transition-all text-sm">
+                            </div>
+                            <div className="flex items-center gap-3">
+                                {selectedAssets.size > 0 && (
+                                    <button 
+                                        onClick={handleBatchDelete}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white rounded-xl font-bold transition-all text-sm"
+                                    >
+                                        <Trash2 size={16} /> 删除 ({selectedAssets.size})
+                                    </button>
+                                )}
+                                <button 
+                                    onClick={onAddAsset} 
+                                    className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/30 transition-all text-sm transform hover:scale-105"
+                                >
                                     <Plus size={18} /> 添加资产
                                 </button>
                             </div>
-                        </header>
-                        <div className="glass-card rounded-2xl overflow-hidden border border-white/40">
-                             <table className="w-full text-left text-sm">
-                                 <thead className="bg-slate-50/50 dark:bg-slate-800/50 h-12 border-b border-white/10">
-                                     <tr>
-                                         <th className="px-6 font-bold text-slate-500">名称</th>
-                                         <th className="px-6 font-bold text-slate-500">代码</th>
-                                         <th className="px-6 font-bold text-slate-500">类型</th>
-                                         <th className="px-6 font-bold text-slate-500">最新价</th>
-                                         <th className="px-6 font-bold text-slate-500 text-right">操作</th>
-                                     </tr>
-                                 </thead>
-                                 <tbody className="divide-y divide-white/10">
-                                     {filteredAssets.map(asset => (
-                                         <tr key={asset.id} className="hover:bg-white/40 dark:hover:bg-white/5 transition-colors group">
-                                             <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">{asset.name}</td>
-                                             <td className="px-6 py-4 font-mono text-slate-500 bg-slate-100/30 dark:bg-white/5 rounded w-fit">{asset.code}</td>
-                                             <td className="px-6 py-4">
-                                                 <span className={`px-2 py-1 rounded-lg text-xs font-bold 
-                                                     ${asset.category === 'fund' ? 'bg-orange-100 text-orange-700' : 
-                                                       asset.category === 'index' ? 'bg-blue-100 text-blue-700' : 
-                                                       'bg-purple-100 text-purple-700'}`}>
-                                                     {asset.category.toUpperCase()}
-                                                 </span>
-                                             </td>
-                                             <td className="px-6 py-4 font-mono">{asset.currentValue}</td>
-                                             <td className="px-6 py-4 text-right">
-                                                 <button onClick={() => onDeleteAsset(asset.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
-                                             </td>
-                                         </tr>
-                                     ))}
-                                 </tbody>
-                             </table>
+                        </div>
+
+                        {/* Data Table */}
+                        <div className="glass-card rounded-3xl border border-white/20 overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-slate-50/50 dark:bg-white/5 h-12 border-b border-white/10">
+                                        <tr>
+                                            <th className="px-6 w-12 text-center">
+                                                <input 
+                                                    type="checkbox" 
+                                                    onChange={(e) => handleSelectAll(e.target.checked)}
+                                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                />
+                                            </th>
+                                            <th className="px-6 font-bold text-slate-500">名称/代码</th>
+                                            <th className="px-6 font-bold text-slate-500">类型</th>
+                                            <th className="px-6 font-bold text-slate-500">价格</th>
+                                            <th className="px-6 font-bold text-slate-500">持仓/市值</th>
+                                            <th className="px-6 font-bold text-slate-500">持有收益</th>
+                                            <th className="px-6 font-bold text-slate-500 text-right">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/10">
+                                        {filteredAssets.map(asset => {
+                                            const hasPosition = asset.shares && asset.shares > 0 && asset.costPrice;
+                                            const profit = hasPosition ? (asset.currentValue - asset.costPrice!) * asset.shares! : 0;
+                                            const profitRate = hasPosition ? (profit / (asset.costPrice! * asset.shares!)) * 100 : 0;
+                                            const marketValue = hasPosition ? asset.currentValue * asset.shares! : 0;
+                                            const isProfit = profit >= 0;
+
+                                            return (
+                                                <tr key={asset.id} className={`hover:bg-blue-50/50 dark:hover:bg-white/5 transition-colors group ${selectedAssets.has(asset.id) ? 'bg-blue-50/30' : ''}`}>
+                                                    <td className="px-6 text-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={selectedAssets.has(asset.id)}
+                                                            onChange={(e) => handleSelectOne(asset.id, e.target.checked)}
+                                                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                        />
+                                                    </td>
+                                                    <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                                                                asset.category === 'fund' ? 'bg-orange-100 text-orange-600' : 
+                                                                asset.category === 'index' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                                                            }`}>
+                                                                {asset.name[0]}
+                                                            </div>
+                                                            <div>
+                                                                <div>{asset.name}</div>
+                                                                <div className="font-mono text-xs text-slate-400 font-normal">{asset.code}</div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                                            asset.category === 'fund' ? 'bg-orange-500/10 text-orange-600' : 
+                                                            asset.category === 'index' ? 'bg-purple-500/10 text-purple-600' : 'bg-blue-500/10 text-blue-600'
+                                                        }`}>
+                                                            {asset.category.toUpperCase()}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 font-mono font-bold text-slate-700 dark:text-slate-200">
+                                                        {asset.currentValue.toFixed(4)}
+                                                        <div className="text-xs text-slate-400 font-normal">{asset.lastUpdate?.split(' ')[1] || '--:--'}</div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        {hasPosition ? (
+                                                            <div className="text-xs space-y-0.5">
+                                                                <div className="flex justify-between w-32"><span className="text-slate-400">持仓:</span> <span className="font-mono text-slate-700 dark:text-slate-300">{asset.shares?.toFixed(2)}</span></div>
+                                                                <div className="flex justify-between w-32"><span className="text-slate-400">市值:</span> <span className="font-mono text-slate-900 dark:text-white font-bold">{marketValue.toFixed(2)}</span></div>
+                                                                <div className="flex justify-between w-32 bg-slate-50 dark:bg-white/5 rounded px-1"><span className="text-slate-400 scale-90 origin-left">成本:</span> <span className="font-mono text-slate-500 scale-90 origin-right">{asset.costPrice?.toFixed(4)}</span></div>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-slate-400">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        {hasPosition ? (
+                                                            <div>
+                                                                <div className={`font-bold font-mono ${isProfit ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                                                    {isProfit ? '+' : ''}{profit.toFixed(2)}
+                                                                </div>
+                                                                <div className={`text-xs ${isProfit ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                                                    {isProfit ? '+' : ''}{profitRate.toFixed(2)}%
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-slate-400">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <IconButton icon={MoreHorizontal} />
+                                                            <IconButton icon={Trash2} danger onClick={() => onDeleteAsset(asset.id)} />
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {filteredAssets.length === 0 && (
+                                <div className="p-10 text-center text-slate-400">
+                                    <div className="mb-2"><Search size={40} className="mx-auto opacity-20" /></div>
+                                    <p>未找到匹配的资产</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
 
-                {activeTab === 'service' && (
-                    <div className="space-y-6 animate-fade-in">
-                        <header className="mb-8">
-                            <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">服务监控</h1>
-                            <p className="text-slate-500 dark:text-slate-400">后端服务与数据源连接状态诊断。</p>
-                        </header>
-                         <div className="space-y-4">
-                            <div className="glass-card p-6 rounded-2xl border border-white/40 flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center text-green-600"><Activity size={24} /></div>
-                                    <div><h3 className="font-bold text-lg text-slate-800 dark:text-white">EastMoney API Gateway</h3><div className="flex items-center gap-2 text-sm text-slate-500"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>Operational</div></div>
-                                </div>
-                                <div className="text-right"><div className="font-mono text-xl font-bold text-slate-700 dark:text-slate-200">{serviceLatency}ms</div><div className="text-xs text-slate-400">Latency</div></div>
-                            </div>
-                            <div className="glass-card p-6 rounded-2xl border border-white/40">
-                                <h3 className="font-bold mb-4 text-slate-700 dark:text-slate-200">Endpoint Status</h3>
-                                <div className="space-y-3">
-                                    {[{ name: 'Real-time Quotes (Batch)', url: 'push2.eastmoney.com/api/qt/ulist', status: 'OK' },{ name: 'Chart Data (Min)', url: 'push2.eastmoney.com/api/qt/trends2', status: 'OK' },{ name: 'Historical K-Line', url: 'push2his.eastmoney.com/api/qt/kline', status: 'OK' },{ name: 'Fund Basic Info', url: 'j5.dfcfw.com/sc/tfs', status: 'OK' }].map((ep, i) => (
-                                        <div key={i} className="flex items-center justify-between p-3 bg-white/30 dark:bg-black/10 rounded-xl"><div className="flex items-center gap-3"><CheckCircle2 size={16} className="text-green-500" /><div><div className="font-bold text-sm text-slate-700 dark:text-slate-300">{ep.name}</div><div className="text-xs font-mono text-slate-400">{ep.url}</div></div></div><span className="text-xs font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded">200 OK</span></div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'logs' && (
-                    <div className="space-y-6 animate-fade-in h-full flex flex-col">
-                         <header className="mb-4">
-                            <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">系统日志</h1>
-                            <p className="text-slate-500 dark:text-slate-400">实时查看系统运行日志与调试信息。</p>
-                        </header>
-                         <div className="glass-card flex-1 rounded-2xl border border-white/40 overflow-hidden flex flex-col">
-                             <div className="p-2 border-b border-white/10 bg-black/5 dark:bg-white/5 flex gap-2">
-                                 <button onClick={() => setLogs([])} className="text-xs px-3 py-1 bg-white/20 hover:bg-white/40 rounded transition-colors">清除日志</button>
-                             </div>
-                             <div className="flex-1 overflow-y-auto p-4 font-mono text-xs space-y-2 bg-slate-900 text-slate-300">
-                                 {logs.map((log, i) => (
-                                     <div key={i} className="flex gap-4 hover:bg-white/5 p-0.5 rounded">
-                                         <span className="text-slate-500 opacity-50">{log.time}</span>
-                                         <span className={`uppercase font-bold ${log.type === 'error' ? 'text-red-400' : log.type === 'warn' ? 'text-amber-400' : 'text-blue-400'}`}>{log.type}</span>
-                                         <span>{log.msg}</span>
-                                     </div>
-                                 ))}
-                             </div>
-                         </div>
-                    </div>
-                )}
-
+                {/* SETTINGS TAB */}
                 {activeTab === 'settings' && (
-                    <div className="space-y-6 animate-fade-in">
-                        <header className="mb-8">
-                            <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">系统设置</h1>
-                            <p className="text-slate-500 dark:text-slate-400">配置全局参数与个性化选项。</p>
-                        </header>
-
-                        <div className="space-y-6">
-                            {/* Theme Config */}
-                            <div className="glass-card p-6 rounded-2xl border border-white/40">
-                                <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-4">界面外观</h3>
-                                <div className="flex gap-4">
-                                     <button onClick={() => setIsDarkMode(false)} className={`flex-1 p-4 rounded-xl border-2 transition-all ${!isDarkMode ? 'border-blue-500 bg-blue-500/5' : 'border-transparent bg-black/5 dark:bg-white/5'}`}>
-                                         <div className="font-bold mb-1">Light Mode</div>
-                                         <div className="text-xs text-slate-500">明亮清爽的日间模式</div>
-                                     </button>
-                                     <button onClick={() => setIsDarkMode(true)} className={`flex-1 p-4 rounded-xl border-2 transition-all ${isDarkMode ? 'border-blue-500 bg-blue-500/5' : 'border-transparent bg-black/5 dark:bg-white/5'}`}>
-                                         <div className="font-bold mb-1">Dark Mode</div>
-                                         <div className="text-xs text-slate-500">深沉专注的夜间模式</div>
-                                     </button>
+                    <div className="max-w-2xl mx-auto space-y-8 animate-fade-in-up">
+                        <section>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                <Settings size={20} className="text-blue-500"/> 通用设置
+                            </h3>
+                            <div className="glass-card p-2 rounded-2xl border border-white/20">
+                                <div className="p-4 hover:bg-white/5 rounded-xl transition-colors flex items-center justify-between border-b border-white/5">
+                                    <div>
+                                        <div className="font-bold text-slate-700 dark:text-slate-200">深色模式</div>
+                                        <div className="text-xs text-slate-500">切换系统界面主题风格</div>
+                                    </div>
+                                    <button 
+                                        onClick={() => setIsDarkMode(!isDarkMode)}
+                                        className={`w-12 h-7 rounded-full transition-colors relative ${isDarkMode ? 'bg-blue-600' : 'bg-slate-200'}`}
+                                    >
+                                        <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-300 ${isDarkMode ? 'left-6' : 'left-1'}`} />
+                                    </button>
+                                </div>
+                                <div className="p-4 hover:bg-white/5 rounded-xl transition-colors flex items-center justify-between">
+                                    <div>
+                                        <div className="font-bold text-slate-700 dark:text-slate-200">自动刷新</div>
+                                        <div className="text-xs text-slate-500">数据自动同步频率 (当前: {refreshInterval === 0 ? 'Off' : refreshInterval/1000 + 's'})</div>
+                                    </div>
+                                    <div className="flex bg-slate-100 dark:bg-black/20 rounded-lg p-1">
+                                        {[0, 10000, 30000].map(ms => (
+                                            <button 
+                                                key={ms}
+                                                onClick={() => setRefreshInterval(ms)}
+                                                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                                                    refreshInterval === ms 
+                                                    ? 'bg-white shadow text-blue-600' 
+                                                    : 'text-slate-500 hover:text-slate-700'
+                                                }`}
+                                            >
+                                                {ms === 0 ? 'Off' : `${ms/1000}s`}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
+                        </section>
 
-                            {/* Data Config */}
-                            <div className="glass-card p-6 rounded-2xl border border-white/40">
-                                <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-4">数据源配置</h3>
-                                <div className="space-y-4">
-                                     <div>
-                                         <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">首选数据源</label>
-                                         <select 
-                                            value={dataSource} 
-                                            onChange={(e) => setDataSource(e.target.value as DataSource)}
-                                            className="w-full p-3 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                                         >
-                                             <option value="EastMoney">东方财富 (EastMoney) - 推荐</option>
-                                         </select>
-                                         <p className="text-xs text-slate-500 mt-1.5">当前仅支持东方财富作为稳定数据源。</p>
-                                     </div>
-                                     <div>
-                                         <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">自动刷新频率</label>
-                                         <div className="flex gap-3 overflow-x-auto pb-2">
-                                             {[5000, 10000, 30000, 60000, 0].map(ms => (
-                                                 <button 
-                                                    key={ms}
-                                                    onClick={() => setRefreshInterval(ms)}
-                                                    className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-all ${refreshInterval === ms ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-white/30 dark:bg-slate-700/30 hover:bg-white/50'}`}
-                                                 >
-                                                     {ms === 0 ? '手动' : `${ms/1000}秒`}
-                                                 </button>
-                                             ))}
-                                         </div>
-                                     </div>
-                                </div>
-                            </div>
-
-                            {/* Backup & Restore */}
-                            <div className="glass-card p-6 rounded-2xl border border-white/40">
-                                <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-4">数据备份</h3>
+                        <section>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                <Database size={20} className="text-red-500"/> 危险区域
+                            </h3>
+                            <div className="glass-card p-6 rounded-2xl border border-red-500/20 bg-red-500/5">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <div className="font-bold text-slate-700 dark:text-slate-300">导出资产配置</div>
-                                        <div className="text-xs text-slate-500">将当前的资产列表导出为 JSON 文件</div>
-                                    </div>
-                                    <button onClick={handleExport} className="px-6 py-2 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-lg font-bold hover:opacity-90 transition-opacity">
-                                        立即导出
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-                
-                {activeTab === 'database' && (
-                    <div className="space-y-6 animate-fade-in">
-                        <header className="mb-8">
-                            <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">数据库管理</h1>
-                            <p className="text-slate-500 dark:text-slate-400">检查及维护本地数据存储状态。</p>
-                        </header>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            <div className="glass-card p-6 rounded-2xl border border-white/40">
-                                <div className="text-sm font-bold text-slate-500 mb-2">存储占用</div>
-                                <div className="text-3xl font-bold text-slate-800 dark:text-white font-mono">{dbStats.size}</div>
-                                <div className="w-full bg-slate-100 dark:bg-white/10 h-2 rounded-full mt-4 overflow-hidden">
-                                    <div className="bg-blue-500 h-full w-[10%]"></div>
-                                </div>
-                            </div>
-                            <div className="glass-card p-6 rounded-2xl border border-white/40">
-                                <div className="text-sm font-bold text-slate-500 mb-2">记录数量</div>
-                                <div className="text-3xl font-bold text-slate-800 dark:text-white font-mono">{dbStats.count}</div>
-                                <div className="text-xs text-slate-400 mt-2">条资产记录</div>
-                            </div>
-                            <div className="glass-card p-6 rounded-2xl border border-white/40">
-                                <div className="text-sm font-bold text-slate-500 mb-2">数据完整性</div>
-                                <div className={`text-3xl font-bold ${dbStats.integrity === 'Valid' ? 'text-green-600' : 'text-red-500'}`}>{dbStats.integrity}</div>
-                                <div className="text-xs text-slate-400 mt-2">JSON 校验结果</div>
-                            </div>
-                        </div>
-
-                        <div className="glass-card p-6 rounded-2xl border border-white/40">
-                            <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-4">危险操作区</h3>
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between p-4 bg-red-500/5 border border-red-500/10 rounded-xl">
-                                    <div>
-                                        <div className="font-bold text-red-600 dark:text-red-400">重置为演示数据</div>
-                                        <div className="text-xs text-slate-500">将所有资产恢复到系统初始状态，丢失所有自定义更改。</div>
+                                        <div className="font-bold text-red-600">重置所有数据</div>
+                                        <div className="text-xs text-red-600/60 max-w-xs mt-1">
+                                            这将清除所有本地存储的资产数据和设置，恢复到初始状态。此操作不可逆。
+                                        </div>
                                     </div>
                                     <button 
-                                        onClick={() => {
-                                            if (confirm('确定要重置所有数据吗？此操作无法撤销。')) {
-                                                onResetAssets();
-                                                setLogs(prev => [{time: new Date().toLocaleTimeString(), type: 'warn', msg: 'Database reset to default'}, ...prev]);
-                                            }
-                                        }}
-                                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm shadow-lg shadow-red-500/30 transition-all"
+                                        onClick={() => { if(confirm('确定要重置吗？')) onResetAssets(); }}
+                                        className="px-6 py-2 bg-white text-red-600 hover:bg-red-50 rounded-xl font-bold text-sm shadow-sm transition-colors border border-red-100"
                                     >
-                                        重置数据
-                                    </button>
-                                </div>
-                                <div className="flex items-center justify-between p-4 bg-slate-100 dark:bg-white/5 border border-white/10 rounded-xl">
-                                    <div>
-                                        <div className="font-bold text-slate-700 dark:text-slate-300">强制完整性检查</div>
-                                        <div className="text-xs text-slate-500">重新扫描并验证本地存储的数据结构。</div>
-                                    </div>
-                                    <button 
-                                        onClick={() => {
-                                            const checkDB = () => {
-                                                try {
-                                                    const data = localStorage.getItem('userAssets');
-                                                    const size = data ? (data.length * 2 / 1024).toFixed(2) : '0';
-                                                    const parsed = data ? JSON.parse(data) : [];
-                                                    setDbStats({
-                                                        size: `${size} KB`,
-                                                        count: parsed.length,
-                                                        integrity: Array.isArray(parsed) ? 'Valid' : 'Corrupted'
-                                                    });
-                                                    setLogs(prev => [{time: new Date().toLocaleTimeString(), type: 'info', msg: 'Integrity check passed'}, ...prev]);
-                                                } catch(e) {
-                                                    setLogs(prev => [{time: new Date().toLocaleTimeString(), type: 'error', msg: 'Database corruption detected'}, ...prev]);
-                                                }
-                                            };
-                                            checkDB();
-                                        }}
-                                        className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg font-bold text-sm transition-all"
-                                    >
-                                        立即检查
+                                        确认重置
                                     </button>
                                 </div>
                             </div>
-                        </div>
+                        </section>
                     </div>
                 )}
             </div>
         </div>
     );
 };
-

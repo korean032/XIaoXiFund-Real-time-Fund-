@@ -129,7 +129,7 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, onClick, isActive }) => {
         )}
 
         {/* Right Stats */}
-        <div className="text-right flex flex-col items-end min-w-[70px]">
+        <div className="text-right flex flex-col items-end min-w-[80px]">
           <div className={`text-[17px] font-bold font-mono leading-tight transition-colors duration-200 ${textTrend}`}>
             {asset.currentValue.toFixed(asset.category === 'index' ? 2 : 4)}
           </div>
@@ -139,6 +139,39 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, onClick, isActive }) => {
                 {Math.abs(percentChange).toFixed(2)}%
             </div>
           </div>
+          
+          {/* Portfolio P/L (New Section) */}
+          {asset.shares && asset.shares > 0 && asset.costPrice && (
+            <div className="mt-2 flex flex-col items-end animate-fade-in">
+                {(() => {
+                    const marketValue = asset.currentValue * asset.shares;
+                    const totalCost = asset.costPrice * asset.shares;
+                    const profit = marketValue - totalCost;
+                    const profitRate = totalCost > 0 ? (profit / totalCost) * 100 : 0;
+                    const isProfit = profit >= 0;
+                    
+                    return (
+                        <div className="flex flex-col gap-0.5 mt-1 border-t border-slate-100 dark:border-white/5 pt-1.5 w-full">
+                            <div className="flex justify-between items-center w-full text-[10px] text-slate-400">
+                                <span>市值</span>
+                                <span className="font-mono text-slate-700 dark:text-slate-300">{marketValue.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center w-full text-[10px]">
+                                <span className="text-slate-400">持有收益</span>
+                                <div className="text-right">
+                                    <span className={`font-bold ${isProfit ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                        {isProfit ? '+' : ''}{profit.toFixed(2)}
+                                    </span>
+                                    <span className={`ml-1 opacity-80 ${isProfit ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                        ({isProfit ? '+' : ''}{profitRate.toFixed(2)}%)
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
+            </div>
+          )}
         </div>
       </div>
     </div>
