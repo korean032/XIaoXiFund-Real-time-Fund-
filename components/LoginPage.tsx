@@ -61,7 +61,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     setIsLoading(false);
                 } else {
                     // Login Success
-                    onLoginSuccess(data.username, role);
+                    onLoginSuccess(data.username, role, data.token);
                 }
             } else {
                 setError(data.error || 'Authentication failed');

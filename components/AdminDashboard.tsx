@@ -170,9 +170,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setIsTogglingReg(true);
         try {
             const newVal = !regEnabled;
+            const token = localStorage.getItem('xiaoxi_token');
             const res = await fetch('/api/admin/settings', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
+                },
                 body: JSON.stringify({ registration_enabled: newVal })
             });
             if (res.ok) {

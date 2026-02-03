@@ -108,6 +108,7 @@ const App: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [searchResults, setSearchResults] = useState<FundSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [dataPersistenceMsg, setDataPersistenceMsg] = useState('');
@@ -149,9 +150,10 @@ const App: React.FC = () => {
       setIsAuthChecking(false);
   }, []);
 
-  const handleLoginSuccess = async (username: string, role: string) => {
+  const handleLoginSuccess = async (username: string, role: string, token?: string) => {
       localStorage.setItem('xiaoxi_uid', username);
       localStorage.setItem('xiaoxi_role', role);
+      if (token) localStorage.setItem('xiaoxi_token', token);
       setCurrentUser(username);
       setUserRole(role);
       
@@ -171,6 +173,7 @@ const App: React.FC = () => {
   const handleLogout = () => {
       localStorage.removeItem('xiaoxi_uid');
       localStorage.removeItem('xiaoxi_role');
+      localStorage.removeItem('xiaoxi_token');
       setCurrentUser(null);
       setUserRole('user');
       setAssets(INITIAL_ASSETS);

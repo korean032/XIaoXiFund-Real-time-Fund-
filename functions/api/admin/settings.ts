@@ -29,11 +29,19 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     // Or we rely on the client knowing the password.
     // Let's implement a check against Env PASSWORD here to be safe, since this is an Admin-only action.
     
-    // We'll check `x-admin-password` header or body `adminPassword`
-    let adminPass = request.headers.get('x-admin-password');
-    if (!adminPass && body.adminPassword) adminPass = body.adminPassword;
+    // Verify Admin Auth
+    // 1. Check strict password (via header or body)
+    let adminAuth = request.headers.get('x-admin-password');
+    if (!adminAuth && body.adminPassword) adminAuth = body.adminPassword;
 
-    if (adminPass !== env.PASSWORD) {
+    // 2. Check Token (via Authorization header)
+    const authHeader = request.headers.get('Authorization');
+    const token = authHeader?.replace('Bearer ', '');
+
+    const isValidPassword = adminAuth === env.PASSWORD;
+    const isValidToken = token === 'super_admin_token'; // Matches login.ts
+
+    if (!isValidPassword && !isValidToken) {
          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
