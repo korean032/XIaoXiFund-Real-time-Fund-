@@ -128,7 +128,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                                     className="w-full pl-12 pr-4 py-3.5 bg-slate-50/50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500/50 outline-none transition-all font-medium text-slate-800 dark:text-slate-100"
                                     placeholder="Enter your username"
                                     value={username}
-                                    onChange={e => setUsername(e.target.value.toLowerCase())}
+                                    onChange={e => setUsername(e.target.value)}
                                 />
                             </div>
                         </div>
@@ -157,9 +157,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                         <button 
                             type="submit" 
                             disabled={isLoading}
-                            className="w-full py-4 rounded-2xl font-bold text-lg text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transform hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center gap-2"
+                            className="w-full py-4 rounded-2xl font-bold text-lg text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transform hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                         >
-                            {isLoading ? <Loader2 className="animate-spin" /> : (
+                            {isLoading ? (
+                                <>
+                                    <Loader2 className="animate-spin" size={20} />
+                                    <span>Verifying...</span>
+                                </>
+                            ) : (
                                 <>
                                     {mode === 'login' ? 'Sign In' : 'Create Account'} <ArrowRight size={20} />
                                 </>
@@ -169,9 +174,15 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
 
                 {!canRegister && !checkingSettings && mode === 'login' && (
-                    <p className="text-center text-xs text-slate-400 mt-6">
-                        Registration is currently disabled by administrator.
-                    </p>
+                    <div className="mt-6 flex flex-col items-center justify-center text-center space-y-2 opacity-80 hover:opacity-100 transition-opacity">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-400">
+                             <UserPlus size={14} />
+                        </div>
+                        <p className="text-xs text-slate-400 max-w-[200px] leading-relaxed">
+                            Registration is strictly limited. <br/>
+                            Contact administrator for access.
+                        </p>
+                    </div>
                 )}
             </div>
         </div>
