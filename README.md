@@ -95,8 +95,8 @@ npx wrangler login
    - `PASSWORD`: (可选) 站长密码
 
 > **本地开发提示**:
-> 如果需要在本地使用 KV，请在 `wrangler.toml` 中配置 `[[kv_namespaces]]`。
-> 如果本地使用 Upstash，请确保本地也配置了相应的环境变量。
+> 本地 KV 开发无需配置，直接运行 `npm run backend` 即可（已内置配置）。
+> 如果本地使用 Upstash，请确保本地配置了相应的环境变量。
 
 ### 3. 配置 AI 密钥 (Secrets)
 
