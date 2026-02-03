@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "backend": "wrangler pages dev . --kv=FUND_DATA --port=8788",
     "build": "vite build",
     "preview": "vite preview"
   },
