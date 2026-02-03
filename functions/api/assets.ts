@@ -4,13 +4,22 @@ interface RequestBody {
   assets: any[]; // We store the whole array
 }
 
+// --- Helpers ---
+const getUserId = (request: Request): string => {
+  const url = new URL(request.url);
+  const user = url.searchParams.get('user');
+  if (user && /^[a-zA-Z0-9_-]{3,64}$/.test(user)) return user;
+  return 'default'; // Fallback
+};
+
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   try {
-    const { env } = context;
+    const { env, request } = context;
+    const userId = getUserId(request);
+    const key = `user_${userId}`;
+    
     // Get data from KV
-    // Default key is 'user_default' since we don't have auth yet.
-    // In a real app, this would use a user ID from session.
-    const data = await env.FUND_DATA.get('user_default');
+    const data = await env.FUND_DATA.get(key);
     
     // Return empty array if no data found
     const assets = data ? JSON.parse(data) : [];
@@ -26,6 +35,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const { request, env } = context;
+    const userId = getUserId(request);
+    const key = `user_${userId}`;
+
     const body = await request.json() as RequestBody;
     
     if (!body.assets || !Array.isArray(body.assets)) {
@@ -33,9 +45,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     // Save to KV
-    await env.FUND_DATA.put('user_default', JSON.stringify(body.assets));
+    await env.FUND_DATA.put(key, JSON.stringify(body.assets));
     
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, userId }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (err: any) {

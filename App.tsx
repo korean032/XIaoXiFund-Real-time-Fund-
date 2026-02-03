@@ -172,13 +172,9 @@ const App: React.FC = () => {
   useEffect(() => {
       fetchRemoteAssets().then(remoteAssets => {
           if (remoteAssets && remoteAssets.length > 0) {
-               // Simple merge strategy: if local is default, take remote.
-               // Otherwise, we might prompt user, but for now let's just log it or auto-merge if local is empty/default
-               const localSaved = localStorage.getItem('userAssets_v2');
-               if (!localSaved || JSON.parse(localSaved).length === INITIAL_ASSETS.length) {
-                   setAssets(remoteAssets);
-                   console.log('Restored assets from cloud');
-               }
+              setAssets(remoteAssets);
+              console.log('Restored assets from cloud (overwriting local cache)');
+              addLog('info', 'Assets synced from cloud storage');
           }
       });
   }, []);
@@ -264,12 +260,24 @@ const App: React.FC = () => {
           setIsLoadingHistory(true);
           // Always fetch history, even for intraday (分时) to get the base curve
           const history = await fetchAssetHistory(selectedAsset, activeChartPeriod);
+          
           if (history && history.length > 0) {
               setAssets(prev => prev.map(a => a.id === selectedAsset.id ? { ...a, history: history } : a));
-          } else if (activeChartPeriod === '分时' && selectedAsset.currentValue > 0) {
-              // Fallback for intraday if no history but we have current value
-              const nowStr = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
-              setAssets(prev => prev.map(a => a.id === selectedAsset.id ? { ...a, history: [{ time: nowStr, value: selectedAsset.currentValue }] } : a));
+          } else if (activeChartPeriod === '分时') {
+              // Intraday fallback logic
+              const today = new Date().toISOString().split('T')[0];
+              const hasValidLocalHistory = selectedAsset.history && 
+                                         selectedAsset.history.length > 0 && 
+                                         selectedAsset.lastHistoryDate === today;
+
+              if (hasValidLocalHistory) {
+                  // Keep existing local history (do nothing), just stop loading
+                  console.log(`[History] Keeping local accumulated history for ${selectedAsset.name}`);
+              } else if (selectedAsset.currentValue > 0) {
+                  // Only if NO local history, create a single point fallback
+                  const nowStr = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+                  setAssets(prev => prev.map(a => a.id === selectedAsset.id ? { ...a, history: [{ time: nowStr, value: selectedAsset.currentValue }] } : a));
+              }
           }
           setIsLoadingHistory(false);
       };

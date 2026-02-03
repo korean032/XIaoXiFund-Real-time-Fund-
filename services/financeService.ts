@@ -782,9 +782,23 @@ export const updateAssetsWithRealData = async (
 
 // --- Cloudflare KV Sync ---
 
+// --- User Identity ---
+const getCurrentUserId = (): string => {
+    if (typeof window !== 'undefined') {
+        let uid = localStorage.getItem('xiaoxi_uid');
+        if (!uid) {
+            uid = Math.random().toString(36).substring(2, 10);
+            localStorage.setItem('xiaoxi_uid', uid);
+        }
+        return uid;
+    }
+    return 'default';
+};
+
 export const fetchRemoteAssets = async (): Promise<Asset[] | null> => {
     try {
-        const response = await fetch('/api/assets');
+        const uid = getCurrentUserId();
+        const response = await fetch(`/api/assets?user=${uid}`);
         if (!response.ok) return null;
         const assets = await response.json();
         if (Array.isArray(assets) && assets.length > 0) {
@@ -799,7 +813,8 @@ export const fetchRemoteAssets = async (): Promise<Asset[] | null> => {
 
 export const saveRemoteAssets = async (assets: Asset[]): Promise<boolean> => {
     try {
-        const response = await fetch('/api/assets', {
+        const uid = getCurrentUserId();
+        const response = await fetch(`/api/assets?user=${uid}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ assets })
