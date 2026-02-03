@@ -151,6 +151,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Registration Settings
+    const [regEnabled, setRegEnabled] = useState(false);
+    const [isTogglingReg, setIsTogglingReg] = useState(false);
+
+    useEffect(() => {
+        fetch('/api/admin/settings').then(res => {
+            if (res.ok) return res.json();
+            throw new Error('Failed to fetch settings');
+        }).then((data: any) => {
+            setRegEnabled(data.registration_enabled);
+        }).catch(err => {
+            console.error(err);
+        });
+    }, []);
+
+    const toggleRegistration = async () => {
+        setIsTogglingReg(true);
+        try {
+            const newVal = !regEnabled;
+            const res = await fetch('/api/admin/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ registration_enabled: newVal })
+            });
+            if (res.ok) {
+                setRegEnabled(newVal);
+                onAddLog?.('info', `Registration ${newVal ? 'enabled' : 'disabled'}`);
+            } else {
+                onAddLog?.('error', 'Failed to update settings');
+            }
+        } catch (error) {
+            onAddLog?.('error', 'Network error updating settings');
+        } finally {
+            setIsTogglingReg(false);
+        }
+    };
+
     const filteredAssets = assets.filter(a => 
         a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
         a.code.includes(searchTerm)
@@ -563,6 +600,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                             </button>
                                         ))}
                                     </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                <Server size={20} className="text-blue-500"/> 系统访问
+                            </h3>
+                            <div className="glass-card p-2 rounded-2xl border border-white/20">
+                                <div className="p-4 hover:bg-white/5 rounded-xl transition-colors flex items-center justify-between">
+                                    <div>
+                                        <div className="font-bold text-slate-700 dark:text-slate-200">开放注册</div>
+                                        <div className="text-xs text-slate-500">允许新用户自行注册账号</div>
+                                    </div>
+                                    <button 
+                                        onClick={toggleRegistration}
+                                        disabled={isTogglingReg}
+                                        className={`w-12 h-7 rounded-full transition-colors relative ${regEnabled ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-700'}`}
+                                    >
+                                        <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-300 ${regEnabled ? 'left-6' : 'left-1'}`} />
+                                    </button>
                                 </div>
                             </div>
                         </section>
