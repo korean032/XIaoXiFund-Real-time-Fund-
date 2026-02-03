@@ -795,6 +795,28 @@ const getCurrentUserId = (): string => {
     return 'default';
 };
 
+export const persistIntradayData = async (assets: Asset[]): Promise<Asset[]> => {
+    console.log('[Persistence] Starting full intraday backfill...');
+    const updated = await Promise.all(assets.map(async (asset) => {
+        // Only fetch for relevant types
+        if (asset.category === 'fund' && !/^(sh|sz)/.test(asset.code)) return asset; // Skip OTC funds for now unless mapped
+        
+        try {
+            const points = await fetchAssetHistory(asset, '分时');
+            if (points && points.length > 0) {
+                return { ...asset, history: points, lastHistoryDate: new Date().toDateString() };
+            }
+        } catch (e) {
+            console.warn(`[Persistence] Failed to backfill ${asset.name}`, e);
+        }
+        return asset;
+    }));
+    
+    await saveRemoteAssets(updated);
+    console.log('[Persistence] Complete.');
+    return updated;
+};
+
 export const fetchRemoteAssets = async (): Promise<Asset[] | null> => {
     try {
         const uid = getCurrentUserId();

@@ -24,9 +24,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         return new Response(JSON.stringify({ error: 'Invalid username or password' }), { status: 400, headers: corsHeaders });
     }
 
+    const normalizedUsername = username.toLowerCase();
+
     // 2. Check if user exists
     // We store user meta in `users:{username}`
-    const existingUser = await db.get(`users:${username}`);
+    const existingUser = await db.get(`users:${normalizedUsername}`);
     if (existingUser) {
         return new Response(JSON.stringify({ error: 'Username already taken' }), { status: 409, headers: corsHeaders });
     }
@@ -47,13 +49,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
     const newUser = {
-        username,
+        username: normalizedUsername, // Store normalized
+        display_name: username, // Optional: store original casing for display
         passwordHash,
         createdAt: new Date().toISOString(),
         role: 'user'
     };
 
-    await db.put(`users:${username}`, newUser);
+    await db.put(`users:${normalizedUsername}`, newUser);
 
     return new Response(JSON.stringify({ success: true, username }), {
        headers: { 'Content-Type': 'application/json', ...corsHeaders } 

@@ -4,7 +4,7 @@ import { Asset, AssetCategory, ChartPeriod, DataSource, HistoryPoint, MarketStat
 import AssetCard from './components/AssetCard';
 import FundChart from './components/FundChart';
 import { AdminDashboard } from './components/AdminDashboard';
-import { fetchAssetHistory, fetchAssetSparkline, searchFunds, updateAssetsWithRealData, fetchFundHoldings, fetchRemoteAssets, saveRemoteAssets } from './services/financeService';
+import { fetchAssetHistory, fetchAssetSparkline, searchFunds, updateAssetsWithRealData, fetchFundHoldings, fetchRemoteAssets, saveRemoteAssets, persistIntradayData } from './services/financeService';
 import { recognizePortfolioImage } from './services/imageRecognition';
 import LoginPage from './components/LoginPage';
 import { 
@@ -1341,25 +1341,51 @@ const App: React.FC = () => {
                   >
                       <X size={24} />
                   </button>
-              </div>
-              <div className="h-full p-4 sm:p-8">
-                  <AdminDashboard 
-                      assets={assets}
-                      onDeleteAsset={removeAsset}
-                      onAddAsset={() => { setShowAdmin(false); setIsAddModalOpen(true); }}
-                      dataSource={dataSource}
-                      setDataSource={setDataSource}
-                      refreshInterval={refreshInterval}
-                      setRefreshInterval={setRefreshInterval}
-                      isDarkMode={isDarkMode}
-                      setIsDarkMode={setIsDarkMode}
-                      onResetAssets={resetAssets}
-                      logs={logs}
-                      onAddLog={addLog}
-                      onEditAsset={(asset) => { 
-                          setSelectedAssetId(asset.id); // Also select it in the main view
-                          setShowAdmin(false); 
-                          openEditPortfolio(); // Try to use the existing helper, but need to ensure it uses the *passed* asset or updates selectedAsset first?
+                  // Initial Data Fetch
+      const loadData = async () => {
+          setIsLoading(true);
+          try {
+             // 1. Try Remote First
+             const remoteAssets = await fetchRemoteAssets();
+             let initialAssets = assets;
+             
+             if (remoteAssets) {
+                 // Check dates and clean stale history
+                 const today = new Date().toDateString();
+                 initialAssets = remoteAssets.map(a => {
+                     // If stored history is old, clear it
+                     if (a.lastHistoryDate && a.lastHistoryDate !== today) {
+                         return { ...a, history: [], lastHistoryDate: today };
+                     }
+                     return a;
+                 });
+                 setAssets(initialAssets);
+                 addLog('info', 'Loaded data from cloud');
+
+                 // 2. Background Backfill (New Feature)
+                 // Fetch full API history to fill gaps and save back to DB
+                 setTimeout(async () => {
+                     if (initialAssets.length > 0) {
+                        const backfilled = await persistIntradayData(initialAssets);
+                        setAssets(backfilled);
+                        addLog('success', 'Intraday history synced to storage');
+                     }
+                 }, 1000);
+
+             } else {
+                 addLog('info', 'No cloud data found, using local');
+             }
+
+             // 3. Refresh Real-time Data
+             await refreshAll(initialAssets);
+
+          } catch (e) {
+              console.error(e);
+              addLog('error', 'Failed to load assets');
+          } finally {
+              setIsLoading(false);
+          }
+      };          openEditPortfolio(); // Try to use the existing helper, but need to ensure it uses the *passed* asset or updates selectedAsset first?
                           // Actually openEditPortfolio uses 'selectedAsset' state.
                           // So we simply set selectedAssetId, wait for effect? No, effects might be async/slow.
                           // Better: Just set the state and open.

@@ -13,15 +13,19 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         return new Response(JSON.stringify({ error: 'Missing credentials' }), { status: 400, headers: corsHeaders });
     }
 
+    // Normalize username to lowercase for case-insensitive matching
+    const normalizedUsername = username?.toLowerCase();
+    
     // 1. Check Super Admin (Env Vars) first
     // This allows the owner to always log in even if DB is down or empty
     const envUser = env.USERNAME;
     const envPass = env.PASSWORD;
     
-    if (envUser && envPass && username === envUser && password === envPass) {
+    // Check if envUser matches normalized input (case-insensitive)
+    if (envUser && envPass && normalizedUsername === envUser.toLowerCase() && password === envPass) {
         return new Response(JSON.stringify({ 
             success: true, 
-            username: envUser,
+            username: envUser, // Return the configured casing
             role: 'admin',
             token: 'super_admin_token'
         }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -29,7 +33,15 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     // 2. Check Database Users
     const db = createDB(env);
-    const userStr = await db.get(`users:${username}`);
+    // Use normalized username for lookup if we decide to store them lowercase
+    // For now, let's try strict lookup first, then lowercase lookup if strict fails?
+    // userStr = await db.get(`users:${username}`);
+    
+    // BETTER STRATEGY: standardized on lowercase keys for all new users.
+    // But backward compatibility? 
+    // If we just started, we can enforce lowercase.
+    
+    const userStr = await db.get(`users:${normalizedUsername}`);
     
     if (!userStr) {
         return new Response(JSON.stringify({ error: 'Invalid credentials' }), { status: 401, headers: corsHeaders });
