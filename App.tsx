@@ -1406,22 +1406,7 @@ const App: React.FC = () => {
               </div>
           </div>
       )}
-                              setPortfolioInputMode('shares');
-                              setEditingShares(asset.shares.toString());
-                              setEditingCostPrice(asset.costPrice.toString());
-                              setEditingAmount((asset.shares * asset.costPrice).toFixed(2));
-                          } else {
-                              setPortfolioInputMode('amount');
-                              setEditingShares('');
-                              setEditingCostPrice('');
-                              setEditingAmount('');
-                          }
-                          setIsEditPortfolioOpen(true);
-                      }}
-                  />
-              </div>
-          </div>
-      )}
+
       
     </div>
   );
