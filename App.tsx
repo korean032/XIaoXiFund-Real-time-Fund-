@@ -255,8 +255,7 @@ const App: React.FC = () => {
                  }
              }
              
-             // Refresh Data
-             await refreshAll(initialAssets);
+
           } catch (e) {
               console.error(e);
           } finally {
