@@ -19,4 +19,9 @@ interface Env {
   CHATANYWHERE_API_KEY: string;
   VVEAI_API_KEY: string;
   FUND_DATA: KVNamespace;
+  UPSTASH_URL?: string;
+  UPSTASH_TOKEN?: string;
+  NEXT_PUBLIC_STORAGE_TYPE?: string;
+  USERNAME?: string;
+  PASSWORD?: string;
 }
