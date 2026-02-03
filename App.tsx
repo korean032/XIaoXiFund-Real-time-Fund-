@@ -6,11 +6,11 @@ import FundChart from './components/FundChart';
 import { AdminDashboard } from './components/AdminDashboard';
 import { fetchAssetHistory, fetchAssetSparkline, searchFunds, updateAssetsWithRealData, fetchFundHoldings, fetchRemoteAssets, saveRemoteAssets } from './services/financeService';
 import { recognizePortfolioImage } from './services/imageRecognition';
-import AdminLogin from './components/AdminLogin';
+import LoginPage from './components/LoginPage';
 import { 
   LineChart, Plus, Search, RefreshCw, X, Loader2, ChevronLeft, ArrowUpRight, 
   TrendingUp, Activity, Globe, Coins, Layers, Clock, Moon, Sun, Settings, Check, 
-  Banknote, BarChart3, Zap, Menu, Filter, PieChart, ChevronRight, Server, Cloud, Download
+  Banknote, BarChart3, Zap, Menu, Filter, PieChart, ChevronRight, Server, Cloud, Download, LogIn
 } from 'lucide-react';
 
 // --- Mock Data Generators ---
@@ -134,43 +134,50 @@ const App: React.FC = () => {
   const [isRecognizing, setIsRecognizing] = useState(false); // AI识别中
   const [recognitionError, setRecognitionError] = useState('');
 
-  // Admin Auth & Routing
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-  // Default to false, check URL on mount
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  // --- User Auth State ---
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string>('user');
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   useEffect(() => {
-      // Simple routing check
-      const checkRoute = () => {
-          const path = window.location.pathname;
-          const hash = window.location.hash;
-          if (path === '/admin' || hash === '#/admin' || hash === '#admin') {
-              if (isAdminLoggedIn) {
-                  setShowAdmin(true);
-              } else {
-                  setShowAdminLogin(true);
-              }
-          }
-      };
-      
-      checkRoute();
-      window.addEventListener('popstate', checkRoute);
-      return () => window.removeEventListener('popstate', checkRoute);
-  }, [isAdminLoggedIn]);
-
-  const handleLoginSuccess = async () => {
-      setIsAdminLoggedIn(true);
-      setShowAdminLogin(false);
-      setShowAdmin(true);
-      addLog('info', 'Admin logged in - Syncing data...');
-      
-      // Refresh data with new Admin ID
-      const remote = await fetchRemoteAssets();
-      if (remote) {
-          setAssets(remote);
-          addLog('info', 'Data synced from cloud');
+      const uid = localStorage.getItem('xiaoxi_uid');
+      const role = localStorage.getItem('xiaoxi_role');
+      if (uid) {
+          setCurrentUser(uid);
+          setUserRole(role || 'user');
       }
+      setIsAuthChecking(false);
+  }, []);
+
+  const handleLoginSuccess = async (username: string, role: string) => {
+      localStorage.setItem('xiaoxi_uid', username);
+      localStorage.setItem('xiaoxi_role', role);
+      setCurrentUser(username);
+      setUserRole(role);
+      
+      addLog('info', `Welcome back, ${username}`);
+      
+      setTimeout(async () => {
+          const remote = await fetchRemoteAssets();
+          if (remote) {
+              setAssets(remote);
+              addLog('info', 'Portfolio synced');
+          } else {
+              if (assets.length > 0) setAssets([]); 
+          }
+      }, 100);
   };
+
+  const handleLogout = () => {
+      localStorage.removeItem('xiaoxi_uid');
+      localStorage.removeItem('xiaoxi_role');
+      setCurrentUser(null);
+      setUserRole('user');
+      setAssets(INITIAL_ASSETS);
+  };
+
+  // derived admin state for UI
+  const isAdmin = userRole === 'admin';
 
   const assetsRef = useRef(assets);
   useEffect(() => {
@@ -541,17 +548,12 @@ const App: React.FC = () => {
 
           const currentShares = selectedAsset.shares || 0;
           const currentCost = selectedAsset.costPrice || 0;
-          const currentTotalCost = currentShares * currentCost; // Previous total cost
+          const currentTotalCost = currentShares * currentCost; 
 
           // Add Position Logic
-          const netBuyAmount = buyAmount * (1 - feeRate); // Money that actually goes into shares? 
-          // Actually, standard formula for cost basis:
-          // Total Cost Basis = Old Cost Basis + New Buy Amount (GROSS)
-          // New Shares = Buy Amount * (1 - Fee) / Unit Price
-          
           const newShares = (buyAmount * (1 - feeRate)) / buyPrice;
           const finalTotalShares = currentShares + newShares;
-          const finalTotalCost = currentTotalCost + buyAmount; // You spent this much more
+          const finalTotalCost = currentTotalCost + buyAmount; 
 
           const finalAvgCost = finalTotalCost / finalTotalShares;
 
@@ -561,7 +563,7 @@ const App: React.FC = () => {
                   : a
           ));
           
-          addLog('info', `Added position for ${selectedAsset.name}: +${netBuyAmount.toFixed(2)} CNY`);
+          addLog('info', `Added position for ${selectedAsset.name}`);
       }
 
       setIsEditPortfolioOpen(false);
@@ -656,6 +658,15 @@ const App: React.FC = () => {
     { id: 'backend', label: '后台', icon: Server },
   ];
 
+    // --- User Auth State ---
+
+
+
+
+  if (!currentUser) {
+      return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="relative h-screen flex flex-col font-sans overflow-hidden text-slate-800 dark:text-slate-100 transition-colors duration-500">
       
@@ -721,7 +732,15 @@ const App: React.FC = () => {
             >
                 <RefreshCw size={18} className={`transition-all ${isRefreshing ? "animate-spin text-blue-600 dark:text-blue-400" : "group-hover:rotate-180"}`} />
             </button>
+
+            {isAdmin && (
+                <button onClick={() => setActiveCategory('backend')} className="p-2.5 glass-button rounded-full text-slate-600 dark:text-slate-300 relative group" title="管理后台">
+                    <Server size={18} />
+                </button>
+            )}
+
             <button onClick={() => setShowSettings(!showSettings)} className="p-2.5 glass-button rounded-full text-slate-600 dark:text-slate-300"><Settings size={18} /></button>
+            <button onClick={handleLogout} className="p-2.5 glass-button rounded-full text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-500 transition-colors" title="退出登录"><LogIn className="rotate-180" size={18} /></button>
             <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-2 bg-blue-600/90 hover:bg-blue-600 text-white px-5 py-2.5 rounded-full font-bold transition-all shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-105 active:scale-95 backdrop-blur-sm border border-white/20"><Plus size={18} /><span className="hidden sm:inline">添加资产</span></button>
         </div>
       </header>
@@ -1370,11 +1389,6 @@ const App: React.FC = () => {
           </div>
       )}
       
-      {/* Admin Login Portal */}
-      {showAdminLogin && (
-          <AdminLogin onLoginSuccess={handleLoginSuccess} />
-      )}
-
     </div>
   );
 };
