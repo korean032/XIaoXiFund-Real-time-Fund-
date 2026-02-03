@@ -202,7 +202,7 @@ const App: React.FC = () => {
                   if (ok) {
                       console.log('Assets synced to cloud');
                       setDataPersistenceMsg('已同步');
-                      addLog('info', 'Assets automatically synced to KV cloud storage');
+                      addLog('info', 'Assets automatically synced to cloud storage');
                       setTimeout(() => setDataPersistenceMsg(''), 2000);
                   } else {
                       setDataPersistenceMsg('同步失败');
