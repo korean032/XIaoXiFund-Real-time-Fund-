@@ -146,10 +146,17 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = async () => {
       setIsAdminLoggedIn(true);
       setShowAdmin(true);
-      addLog('info', 'Admin logged in');
+      addLog('info', 'Admin logged in - Syncing data...');
+      
+      // Refresh data with new Admin ID
+      const remote = await fetchRemoteAssets();
+      if (remote) {
+          setAssets(remote);
+          addLog('info', 'Data synced from cloud');
+      }
   };
 
   const assetsRef = useRef(assets);

@@ -25,13 +25,22 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLoginSuccess
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password })
             });
-            const data = await res.json();
+            const result = await res.json();
             
-            if (res.ok && data.success) {
-                onLoginSuccess();
-                onClose();
+            if (result.success) {
+        // Save auth state
+        localStorage.setItem('xiaoxi_admin_token', result.token);
+        
+        // Setup Sync ID
+        if (result.username) {
+            localStorage.setItem('xiaoxi_uid', result.username); // Override random UID with Admin Username
+            localStorage.setItem('xiaoxi_sync_id', result.username); // Specific sync key
+        }
+        
+        onLoginSuccess();
+        onClose();
             } else {
-                setError(data.error || 'Login failed');
+                setError(result.error || 'Login failed');
             }
         } catch (err) {
             setError('Network error');

@@ -18,7 +18,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     if (password === configuredPass) {
-        return new Response(JSON.stringify({ success: true, token: 'session_valid' }), {
+        return new Response(JSON.stringify({ 
+            success: true, 
+            token: 'session_valid',
+            username: env.USERNAME || 'admin' // Return configured username for sync
+        }), {
             headers: { 'Content-Type': 'application/json' }
         });
     }
