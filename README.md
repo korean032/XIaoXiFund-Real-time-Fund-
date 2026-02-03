@@ -70,34 +70,33 @@ npm install -g wrangler
 npx wrangler login
 ```
 
-### 2. 配置云端存储 (KV)
+### 2. 配置数据存储 (任选其一)
 
-为了实现多设备数据同步，我们需要创建一个 KV 命名空间：
+本项目支持 **Cloudflare KV** (默认) 和 **Upstash Redis** 两种存储方式。
 
-### 2. 配置云端存储 (KV)
-
-为了实现多设备数据同步，我们需要创建一个 KV 命名空间。
-
-#### 方式一：Dashboard 一键绑定（推荐）
+#### 方案 A: Cloudflare KV (默认 - 简单)
 
 1. 登录 Cloudflare Pages 控制台，进入您的项目。
 2. 转到 **Settings (设置) -> Functions (函数)**。
 3. 找到 **KV Namespace Bindings** 区域，点击 **Add binding (添加绑定)**。
 4. **Variable name (变量名称)** 输入: `FUND_DATA`。
 5. **KV Namespace** 选择或创建一个新的空间（如 `xiaoxi-fund-kv`）。
-6. 点击 **Save** 即可生效！无需修改代码。
+6. 点击 **Save** 即可生效。
 
-#### 方式二：CLI 配置 (仅用于本地开发)
+#### 方案 B: Upstash Redis (进阶 - 推荐)
 
-如果您需要在本地运行 (`npx wrangler pages dev`)，此步骤是必须的。
-配置 `wrangler.toml`：
+1. 注册 [Upstash](https://upstash.com/) 并创建一个 Redis 数据库。
+2. 复制数据库的 **UPSTASH_URL** 和 **UPSTASH_TOKEN**。
+3. 在 Cloudflare Pages 后台 **Settings -> Environment variables** 添加以下变量：
+   - `NEXT_PUBLIC_STORAGE_TYPE`: `upstash`
+   - `UPSTASH_URL`: (您的 HTTPS Endpoint)
+   - `UPSTASH_TOKEN`: (您的 Token)
+   - `USERNAME`: (可选) 站长用户名
+   - `PASSWORD`: (可选) 站长密码
 
-```bash
-npx wrangler kv:namespace create FUND_DATA
-# 将输出的 id 填入 wrangler.toml 的 [[kv_namespaces]] 部分
-# binding = "FUND_DATA"
-# id = "你的ID"
-```
+> **本地开发提示**:
+> 如果需要在本地使用 KV，请在 `wrangler.toml` 中配置 `[[kv_namespaces]]`。
+> 如果本地使用 Upstash，请确保本地也配置了相应的环境变量。
 
 ### 3. 配置 AI 密钥 (Secrets)
 
