@@ -6,6 +6,7 @@ import FundChart from './components/FundChart';
 import { AdminDashboard } from './components/AdminDashboard';
 import { fetchAssetHistory, fetchAssetSparkline, searchFunds, updateAssetsWithRealData, fetchFundHoldings, fetchRemoteAssets, saveRemoteAssets } from './services/financeService';
 import { recognizePortfolioImage } from './services/imageRecognition';
+import LoginModal from './components/LoginModal';
 import { 
   LineChart, Plus, Search, RefreshCw, X, Loader2, ChevronLeft, ArrowUpRight, 
   TrendingUp, Activity, Globe, Coins, Layers, Clock, Moon, Sun, Settings, Check, 
@@ -132,6 +133,24 @@ const App: React.FC = () => {
   };
   const [isRecognizing, setIsRecognizing] = useState(false); // AI识别中
   const [recognitionError, setRecognitionError] = useState('');
+
+  // Admin Auth
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+  const handleAdminClick = () => {
+    if (isAdminLoggedIn) {
+        setShowAdmin(true);
+    } else {
+        setIsLoginModalOpen(true);
+    }
+  };
+
+  const handleLoginSuccess = () => {
+      setIsAdminLoggedIn(true);
+      setShowAdmin(true);
+      addLog('info', 'Admin logged in');
+  };
 
   const assetsRef = useRef(assets);
   useEffect(() => {
@@ -684,7 +703,7 @@ const App: React.FC = () => {
                 <RefreshCw size={18} className={`transition-all ${isRefreshing ? "animate-spin text-blue-600 dark:text-blue-400" : "group-hover:rotate-180"}`} />
             </button>
 
-            <button onClick={() => setShowAdmin(true)} className="p-2.5 glass-button rounded-full text-slate-600 dark:text-slate-300 relative group" title="管理后台">
+            <button onClick={handleAdminClick} className="p-2.5 glass-button rounded-full text-slate-600 dark:text-slate-300 relative group" title="管理后台">
                 <Server size={18} />
             </button>
             <button onClick={() => setShowSettings(!showSettings)} className="p-2.5 glass-button rounded-full text-slate-600 dark:text-slate-300"><Settings size={18} /></button>
@@ -769,7 +788,7 @@ const App: React.FC = () => {
                             添加资产
                         </button>
                         <button 
-                            onClick={() => setShowAdmin(true)}
+                            onClick={handleAdminClick}
                             className="flex-1 glass-button py-4 px-8 rounded-2xl font-bold text-lg text-slate-700 dark:text-slate-200 hover:bg-white/60 dark:hover:bg-white/10 transition-all flex items-center justify-center gap-3"
                         >
                             <Server size={20} />
@@ -1342,6 +1361,12 @@ const App: React.FC = () => {
               </div>
           </div>
       )}
+      
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={() => setIsLoginModalOpen(false)} 
+        onLoginSuccess={handleLoginSuccess}
+      />
     </div>
   );
 };

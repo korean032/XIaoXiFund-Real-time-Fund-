@@ -122,22 +122,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }
     };
 
+    const [storageInfo, setStorageInfo] = useState<{mode: string, upstash: boolean, kv: boolean} | null>(null);
+
     useEffect(() => {
         const checkHealth = async () => {
             const start = performance.now();
             try {
+                // Check Status
+                const statusRes = await fetch('/api/status');
+                if (statusRes.ok) {
+                    const data = await statusRes.json();
+                    setStorageInfo(data);
+                }
+
                 // Simulate checking API latency
-                await new Promise(r => setTimeout(r, Math.random() * 50 + 20)); 
+                // await new Promise(r => setTimeout(r, Math.random() * 50 + 20)); 
                 const latency = Math.floor(performance.now() - start);
                 setServiceLatency(latency);
-                // Reduce log noise, only log health check rarely or on slow
                 if (Math.random() > 0.98) onAddLog?.('info', `Health check passed: ${latency}ms`);
             } catch (e) {
                 setServiceLatency(-1);
                 onAddLog?.('error', 'Health check failed');
             }
         };
-        const timer = setInterval(checkHealth, 5000);
+        checkHealth(); // Initial check
+        const timer = setInterval(checkHealth, 30000); // Check every 30s
         return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -232,11 +241,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 color="bg-amber-500" 
                             />
                             <StatCard 
-                                title="数据刷新" 
-                                value={refreshInterval === 0 ? 'Manual' : `${refreshInterval/1000}s`} 
-                                subtext="自动同步中" 
-                                icon={RefreshCw} 
-                                color="bg-emerald-500" 
+                                title="存储引擎" 
+                                value={storageInfo?.mode === 'upstash' ? 'Upstash Redis' : 'Cloudflare KV'} 
+                                subtext={storageInfo?.mode === 'upstash' ? '高性能数据库' : '边缘存储'} 
+                                icon={Database} 
+                                color={storageInfo?.mode === 'upstash' ? 'bg-emerald-500' : 'bg-orange-500'} 
                             />
                             <StatCard 
                                 title="最后更新" 
